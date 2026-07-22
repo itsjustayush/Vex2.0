@@ -45,6 +45,10 @@
     <!-- Firebase Web SDK (v10 compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+    <!-- Google Identity Services & Workspace Module -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="/static/js/google-services.js"></script>
 </head>
 <body class="bg-background text-on-surface h-full flex overflow-hidden font-sans antialiased">
 
@@ -73,6 +77,49 @@
             <div class="flex justify-end gap-2 pt-2">
                 <button onclick="closeModal('modal-new-project')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
                 <button onclick="createProjectSubmit()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-primary hover:bg-primary-hover text-background">Create Project</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: New Google Calendar Event -->
+    <div id="modal-new-calendar-event" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-base font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">event</span> Add Google Calendar Event
+                </h3>
+                <button onclick="closeModal('modal-new-calendar-event')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Event Summary / Title</label>
+                    <input id="new-cal-title" type="text" placeholder="e.g., Team Sync Meeting" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-sm focus:outline-none focus:border-primary text-on-surface">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-text mb-1">Start Date & Time</label>
+                        <input id="new-cal-start" type="datetime-local" class="w-full bg-surface-high border border-slate-border rounded-xl p-2 text-xs focus:outline-none focus:border-primary text-on-surface">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-text mb-1">End Date & Time</label>
+                        <input id="new-cal-end" type="datetime-local" class="w-full bg-surface-high border border-slate-border rounded-xl p-2 text-xs focus:outline-none focus:border-primary text-on-surface">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Location (Optional)</label>
+                    <input id="new-cal-location" type="text" placeholder="e.g., Google Meet or Room 4B" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-sm focus:outline-none focus:border-primary text-on-surface">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Description (Optional)</label>
+                    <textarea id="new-cal-description" rows="2" placeholder="Agenda or notes..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-sm focus:outline-none focus:border-primary text-on-surface resize-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-new-calendar-event')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
+                <button onclick="submitNewCalendarEvent()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-primary hover:bg-primary-hover text-background flex items-center gap-1.5 shadow">
+                    <span class="material-symbols-outlined text-sm">calendar_add_on</span>
+                    <span>Save to Google Calendar</span>
+                </button>
             </div>
         </div>
     </div>
@@ -137,6 +184,91 @@
         </div>
     </div>
 
+    <!-- Modal: New Google Task -->
+    <div id="modal-new-task" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-400 text-lg">check_circle</span> Create Google Task
+                </h3>
+                <button onclick="closeModal('modal-new-task')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Task Title</label>
+                    <input id="new-task-title" type="text" placeholder="e.g., Complete project proposal" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-emerald-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Due Date (Optional)</label>
+                    <input id="new-task-due" type="date" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-emerald-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Task Notes / Details (Optional)</label>
+                    <textarea id="new-task-notes" rows="3" placeholder="Add additional instructions or context..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-emerald-400 resize-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-new-task')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
+                <button onclick="confirmCreateGoogleTask()" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-background shadow transition-all">Save Google Task</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: New Google Doc -->
+    <div id="modal-new-doc" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-400 text-lg">description</span> Create New Google Doc
+                </h3>
+                <button onclick="closeModal('modal-new-doc')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Document Title</label>
+                    <input id="new-doc-title" type="text" placeholder="e.g., Q3 Research Report" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-blue-400">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-new-doc')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
+                <button onclick="confirmCreateGoogleDoc()" class="px-4 py-2 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-white shadow transition-all">Create Google Doc</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Compose Gmail -->
+    <div id="modal-compose-email" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-rose-400 text-lg">send</span> Compose & Send Email via Gmail
+                </h3>
+                <button onclick="closeModal('modal-compose-email')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">To (Recipient Email)</label>
+                    <input id="compose-to" type="email" placeholder="recipient@example.com" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-rose-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Subject</label>
+                    <input id="compose-subject" type="text" placeholder="Email subject line..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-rose-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Message Body</label>
+                    <textarea id="compose-body" rows="6" placeholder="Write your message here..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-rose-400 resize-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-compose-email')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
+                <button onclick="confirmSendGmailEmail()" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-400 text-white shadow transition-all flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">send</span>
+                    <span>Send Email</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- ========================================== -->
     <!-- LEFT SIDEBAR (280px) -->
@@ -182,6 +314,26 @@
                     <span class="material-symbols-outlined text-lg text-amber-400">lightbulb</span>
                     <span class="flex-1 text-left">Google Keep</span>
                     <span class="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono">Sync</span>
+                </button>
+                <button onclick="switchView('tasks')" id="nav-tasks" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg text-emerald-400">check_circle</span>
+                    <span class="flex-1 text-left">Google Tasks</span>
+                    <span class="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono">Tasks</span>
+                </button>
+                <button onclick="switchView('docs')" id="nav-docs" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg text-blue-400">description</span>
+                    <span class="flex-1 text-left">Google Docs</span>
+                    <span class="text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded font-mono">Docs</span>
+                </button>
+                <button onclick="switchView('drive')" id="nav-drive" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg text-purple-400">folder_shared</span>
+                    <span class="flex-1 text-left">Google Drive / Picker</span>
+                    <span class="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-mono">Drive</span>
+                </button>
+                <button onclick="switchView('gmail')" id="nav-gmail" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg text-rose-400">mail</span>
+                    <span class="flex-1 text-left">Gmail Inbox</span>
+                    <span class="text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded font-mono">Mail</span>
                 </button>
                 <a href="/settings" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
                     <span class="material-symbols-outlined text-lg">settings</span>
@@ -407,6 +559,154 @@
             </div>
         </div>
 
+        <!-- VIEW: GOOGLE TASKS INTEGRATION -->
+        <div id="view-tasks" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-2xl flex-shrink-0">
+                        <span class="material-symbols-outlined">check_circle</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-on-surface">Google Tasks Workspace</h2>
+                            <span id="tasks-auth-badge" class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-mono">Live Sync</span>
+                        </div>
+                        <p class="text-xs text-slate-text mt-0.5">Manage, track, and complete your Google Tasks directly within Vex.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="fetchGoogleTasks()" class="px-3.5 py-2 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-emerald-400">sync</span>
+                        <span>Sync Google Tasks</span>
+                    </button>
+                    <button onclick="openModal('modal-new-task')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-background font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                        <span>New Task</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tasks Container -->
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                    <span class="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-400 text-base">task_alt</span> Your Google Tasks
+                    </span>
+                    <span id="tasks-count" class="text-xs text-slate-text font-mono">0 Tasks</span>
+                </div>
+                <div id="tasks-list" class="space-y-2">
+                    <p class="text-xs text-slate-text text-center py-8">Loading Google Tasks...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: GOOGLE DOCS INTEGRATION -->
+        <div id="view-docs" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center text-2xl flex-shrink-0">
+                        <span class="material-symbols-outlined">description</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-on-surface">Google Docs Workspace</h2>
+                            <span id="docs-auth-badge" class="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-md font-mono">Connected</span>
+                        </div>
+                        <p class="text-xs text-slate-text mt-0.5">Create, search, and manage your Google Docs directly.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="fetchGoogleDocs()" class="px-3.5 py-2 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-blue-400">sync</span>
+                        <span>Sync Docs</span>
+                    </button>
+                    <button onclick="openModal('modal-new-doc')" class="px-4 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                        <span>New Google Doc</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Docs Grid -->
+            <div id="docs-list-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-xs text-slate-text text-center py-8 col-span-full">Loading Google Docs...</p>
+            </div>
+        </div>
+
+        <!-- VIEW: GOOGLE DRIVE / PICKER INTEGRATION -->
+        <div id="view-drive" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center text-2xl flex-shrink-0">
+                        <span class="material-symbols-outlined">folder_shared</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-on-surface">Google Drive & File Picker</h2>
+                            <span class="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded-md font-mono">Google Drive API</span>
+                        </div>
+                        <p class="text-xs text-slate-text mt-0.5">Browse your Google Drive files and import attachments directly into Vex notes.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="fetchGoogleDriveFiles()" class="px-3.5 py-2 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-purple-400">sync</span>
+                        <span>Sync Drive</span>
+                    </button>
+                    <button onclick="openGoogleDrivePicker()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">drive_file_move</span>
+                        <span>Open File Picker</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Drive File Grid -->
+            <div id="drive-files-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-xs text-slate-text text-center py-8 col-span-full">Loading Google Drive files...</p>
+            </div>
+        </div>
+
+        <!-- VIEW: GMAIL INBOX & ACTIONS -->
+        <div id="view-gmail" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center text-2xl flex-shrink-0">
+                        <span class="material-symbols-outlined">mail</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-on-surface">Gmail Inbox & Communications</h2>
+                            <span id="gmail-auth-badge" class="text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded-md font-mono">Gmail API</span>
+                        </div>
+                        <p class="text-xs text-slate-text mt-0.5">Read recent emails and compose messages directly from Vex.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="fetchGmailMessages()" class="px-3.5 py-2 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-rose-400">sync</span>
+                        <span>Refresh Inbox</span>
+                    </button>
+                    <button onclick="openModal('modal-compose-email')" class="px-4 py-2 bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">send</span>
+                        <span>Compose Email</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Email List -->
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-5 space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                    <span class="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-2">
+                        <span class="material-symbols-outlined text-rose-400 text-base">inbox</span> Recent Inbox Messages
+                    </span>
+                    <span id="gmail-messages-count" class="text-xs text-slate-text font-mono">0 Messages</span>
+                </div>
+                <div id="gmail-messages-list" class="space-y-2">
+                    <p class="text-xs text-slate-text text-center py-8">Loading Gmail messages...</p>
+                </div>
+            </div>
+        </div>
+
 
         <!-- VIEW 3: ACTIVE WORKSPACE (SPLIT PANE EDITOR) -->
         <div id="view-workspace" class="hidden flex-1 flex overflow-hidden">
@@ -535,16 +835,36 @@
 
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
             
-            <!-- SECTION 1: INTERACTIVE MONTHLY CALENDAR -->
-            <div class="bg-surface-high/50 border border-slate-border/80 rounded-2xl p-4 space-y-3">
-                <div class="flex items-center justify-between">
-                    <h4 id="calendar-month-year" class="text-xs font-bold text-on-surface">July 2026</h4>
+            <!-- SECTION 1: INTERACTIVE GOOGLE CALENDAR -->
+            <div class="bg-surface-high/50 border border-slate-border/80 rounded-2xl p-4 space-y-3.5 shadow-sm">
+                <!-- Header & Status Badge -->
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary text-base">calendar_month</span>
+                        <h4 id="calendar-month-year" class="text-xs font-bold text-on-surface">July 2026</h4>
+                    </div>
+                    <span id="calendar-auth-badge" class="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono">Not Synced</span>
+                </div>
+
+                <!-- Calendar Navigation & Controls -->
+                <div class="flex items-center justify-between pt-1 border-t border-slate-border/40">
                     <div class="flex items-center gap-1">
-                        <button onclick="changeCalendarMonth(-1)" class="text-slate-text hover:text-on-surface p-1 rounded hover:bg-surface-high">
+                        <button onclick="changeCalendarMonth(-1)" class="text-slate-text hover:text-on-surface p-1 rounded-lg hover:bg-surface-high" title="Previous Month">
                             <span class="material-symbols-outlined text-sm">chevron_left</span>
                         </button>
-                        <button onclick="changeCalendarMonth(1)" class="text-slate-text hover:text-on-surface p-1 rounded hover:bg-surface-high">
+                        <button onclick="changeCalendarMonth(1)" class="text-slate-text hover:text-on-surface p-1 rounded-lg hover:bg-surface-high" title="Next Month">
                             <span class="material-symbols-outlined text-sm">chevron_right</span>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="authorizeGoogleCalendarOAuth()" class="px-2 py-1 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-lg text-[10px] font-semibold transition-all flex items-center gap-1" title="Sync with Google Calendar">
+                            <span class="material-symbols-outlined text-xs text-primary">sync</span>
+                            <span>Sync</span>
+                        </button>
+                        <button onclick="openModal('modal-new-calendar-event')" class="px-2 py-1 bg-primary text-background hover:bg-primary-hover rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 shadow" title="Create Google Calendar Event">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                            <span>Event</span>
                         </button>
                     </div>
                 </div>
@@ -557,6 +877,20 @@
                 <!-- Days Grid -->
                 <div id="calendar-days-grid" class="grid grid-cols-7 text-center text-xs gap-y-1">
                     <!-- Days inserted dynamically via JS -->
+                </div>
+
+                <!-- Google Calendar Events Agenda List -->
+                <div class="pt-3 border-t border-slate-border/50 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span id="calendar-events-header-text" class="text-[11px] font-bold text-on-surface flex items-center gap-1">
+                            <span class="material-symbols-outlined text-primary text-xs">event_note</span> Google Calendar Events
+                        </span>
+                        <button onclick="clearSelectedCalendarDate()" class="text-[10px] text-primary hover:underline">Show All</button>
+                    </div>
+
+                    <div id="calendar-events-list" class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        <!-- Events loaded dynamically via JS -->
+                    </div>
                 </div>
             </div>
 
@@ -615,6 +949,37 @@
         let activeFileId = null;
         let autoSaveTimer = null;
         let currentCalendarDate = new Date();
+        let googleCalendarAccessToken = null;
+        let keepOAuthAccessToken = null;
+        let globalGoogleOAuthToken = null;
+        let calendarEvents = [];
+        let selectedCalendarDate = null;
+
+        function getGoogleAccessToken() {
+            if (window.GoogleWorkspaceService) {
+                const tok = window.GoogleWorkspaceService.getAccessToken();
+                if (tok) return tok;
+            }
+            return googleCalendarAccessToken || keepOAuthAccessToken || globalGoogleOAuthToken || window.googleOAuthAccessToken || null;
+        }
+
+        // Listen for Google Identity Services token updates
+        window.addEventListener('google_workspace_token_ready', (e) => {
+            if (e.detail && e.detail.token) {
+                const token = e.detail.token;
+                googleCalendarAccessToken = token;
+                keepOAuthAccessToken = token;
+                globalGoogleOAuthToken = token;
+                window.googleOAuthAccessToken = token;
+
+                if (typeof fetchGoogleCalendarEvents === 'function') fetchGoogleCalendarEvents();
+                if (typeof fetchGoogleKeepNotes === 'function') fetchGoogleKeepNotes();
+                if (typeof fetchGoogleTasks === 'function') fetchGoogleTasks();
+                if (typeof fetchGoogleDocs === 'function') fetchGoogleDocs();
+                if (typeof fetchGoogleDriveFiles === 'function') fetchGoogleDriveFiles();
+                if (typeof fetchGmailMessages === 'function') fetchGmailMessages();
+            }
+        });
 
         // Firebase Setup
         const firebaseConfig = {{ firebase_json | safe if firebase_json else '{}' }};
@@ -638,8 +1003,16 @@
             if (auth) {
                 auth.getRedirectResult().then(result => {
                     if (result && result.credential && result.credential.accessToken) {
-                        keepOAuthAccessToken = result.credential.accessToken;
-                        showToast('Google Keep connected via redirect!', 'success');
+                        const token = result.credential.accessToken;
+                        if (window.GoogleWorkspaceService) {
+                            window.GoogleWorkspaceService.setAccessToken(token);
+                        }
+                        googleCalendarAccessToken = token;
+                        keepOAuthAccessToken = token;
+                        globalGoogleOAuthToken = token;
+                        window.googleOAuthAccessToken = token;
+                        showToast('Google Services connected via redirect!', 'success');
+                        fetchGoogleCalendarEvents();
                         fetchGoogleKeepNotes();
                     }
                 }).catch(err => {
@@ -795,7 +1168,7 @@
 
         // Switch View Handler
         function switchView(viewName) {
-            ['dashboard', 'projects', 'workspace', 'keep'].forEach(v => {
+            ['dashboard', 'projects', 'workspace', 'keep', 'tasks', 'docs', 'drive', 'gmail'].forEach(v => {
                 const viewEl = document.getElementById(`view-${v}`);
                 if (viewEl) viewEl.classList.add('hidden');
                 const navEl = document.getElementById(`nav-${v}`);
@@ -817,7 +1190,11 @@
                 'dashboard': 'Dashboard Overview',
                 'projects': 'Workspaces & Projects',
                 'workspace': 'Active Note Workspace',
-                'keep': 'Google Keep Workspace Sync'
+                'keep': 'Google Keep Workspace Sync',
+                'tasks': 'Google Tasks Workspace',
+                'docs': 'Google Docs Workspace',
+                'drive': 'Google Drive & File Picker',
+                'gmail': 'Gmail Inbox & Communications'
             };
             document.getElementById('current-view-title').innerText = titles[viewName] || 'Workspace';
 
@@ -825,6 +1202,14 @@
                 loadActiveProjectFiles();
             } else if (viewName === 'keep') {
                 fetchGoogleKeepNotes();
+            } else if (viewName === 'tasks') {
+                fetchGoogleTasks();
+            } else if (viewName === 'docs') {
+                fetchGoogleDocs();
+            } else if (viewName === 'drive') {
+                fetchGoogleDriveFiles();
+            } else if (viewName === 'gmail') {
+                fetchGmailMessages();
             }
         }
 
@@ -873,10 +1258,15 @@
         // ==========================================
         // GOOGLE KEEP SYNC & INTEGRATION
         // ==========================================
-        let keepOAuthAccessToken = null;
         let googleKeepNotes = [];
 
         async function loginGoogleKeepOAuth() {
+            if (window.GoogleWorkspaceService) {
+                showToast('Requesting Google Keep permissions via Google Identity Services...', 'info');
+                await window.GoogleWorkspaceService.requestToken(['https://www.googleapis.com/auth/keep']);
+                return;
+            }
+
             if (!auth) {
                 showToast('Firebase Auth is offline.', 'error');
                 return;
@@ -884,13 +1274,17 @@
 
             try {
                 const provider = new firebase.auth.GoogleAuthProvider();
-                provider.addScope('https://www.googleapis.com/auth/keep');
+                provider.addScope('email');
                 
-                showToast('Opening Google Auth popup for Keep permissions...', 'info');
+                showToast('Opening Google Auth popup...', 'info');
                 const result = await auth.signInWithPopup(provider);
                 if (result && result.credential && result.credential.accessToken) {
-                    keepOAuthAccessToken = result.credential.accessToken;
-                    showToast('Successfully authenticated with Google Keep!', 'success');
+                    const token = result.credential.accessToken;
+                    if (window.GoogleWorkspaceService) {
+                        window.GoogleWorkspaceService.setAccessToken(token);
+                    }
+                    keepOAuthAccessToken = token;
+                    showToast('Successfully authenticated!', 'success');
                     fetchGoogleKeepNotes();
                 } else {
                     showToast('Google Keep authorization completed.', 'success');
@@ -898,25 +1292,7 @@
                 }
             } catch (err) {
                 console.error('Keep OAuth Error:', err);
-                const host = window.location.hostname;
-                const errCode = err && err.code ? err.code : '';
-                const errStr = err && err.message ? err.message : '';
-                if (errCode === 'auth/network-request-failed' || errCode === 'auth/popup-blocked') {
-                    try {
-                        showToast('Popup blocked or network failed. Redirecting for Google Keep...', 'info');
-                        const provider = new firebase.auth.GoogleAuthProvider();
-                        provider.addScope('https://www.googleapis.com/auth/keep');
-                        await auth.signInWithRedirect(provider);
-                        return;
-                    } catch(re) {
-                        console.error('Redirect keep auth failed:', re);
-                    }
-                }
-                if (errCode === 'auth/unauthorized-domain' || errStr.includes('unauthorized-domain')) {
-                    alert(`Firebase Error: Unauthorized Domain\n\nDomain "${host}" is not authorized in your Firebase console.\n\nTo fix:\n1. Open Firebase Console\n2. Go to Authentication -> Settings -> Authorized domains\n3. Click "Add domain" and add: ${host}`);
-                } else {
-                    showToast('Google OAuth: ' + (errStr || 'Cancelled or unavailable'), 'warning');
-                }
+                showToast('Authorization error: ' + (err.message || 'Failed'), 'warning');
             }
         }
 
@@ -1586,10 +1962,625 @@
             history.scrollTop = history.scrollHeight;
         }
 
-        // Calendar Render
+        // ==========================================
+        // GOOGLE CALENDAR & WORKSPACE OAUTH LOGIC
+        // ==========================================
+        async function authorizeGoogleCalendarOAuth() {
+            if (window.GoogleWorkspaceService) {
+                showToast('Connecting Google Workspace permissions via Google Identity Services...', 'info');
+                await window.GoogleWorkspaceService.requestToken();
+                return;
+            }
+
+            if (!auth) {
+                showToast('Firebase Auth is offline.', 'error');
+                return;
+            }
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.addScope('email');
+            provider.addScope('profile');
+            
+            try {
+                const result = await auth.signInWithPopup(provider);
+                if (result && result.credential && result.credential.accessToken) {
+                    const token = result.credential.accessToken;
+                    if (window.GoogleWorkspaceService) {
+                        window.GoogleWorkspaceService.setAccessToken(token);
+                    }
+                    googleCalendarAccessToken = token;
+                    keepOAuthAccessToken = token;
+                    globalGoogleOAuthToken = token;
+                    window.googleOAuthAccessToken = token;
+                    showToast('Google Services connected successfully!', 'success');
+                    await fetchGoogleCalendarEvents();
+                    await fetchGoogleKeepNotes();
+                    await fetchGoogleTasks();
+                    await fetchGoogleDocs();
+                    await fetchGoogleDriveFiles();
+                    await fetchGmailMessages();
+                }
+            } catch (err) {
+                console.error('Google OAuth error:', err);
+                showToast('Google auth error: ' + (err.message || 'Failed'), 'warning');
+            }
+        }
+
+        // ==========================================
+        // GOOGLE TASKS LOGIC
+        // ==========================================
+        let googleTasksList = [];
+
+        async function fetchGoogleTasks() {
+            const container = document.getElementById('tasks-list');
+            const countEl = document.getElementById('tasks-count');
+            const token = getGoogleAccessToken();
+
+            if (!token) {
+                if (container) {
+                    container.innerHTML = `
+                        <div class="p-6 text-center space-y-3">
+                            <p class="text-xs text-slate-text">Connect your Google account to view and sync your live Google Tasks.</p>
+                            <button onclick="authorizeGoogleCalendarOAuth()" class="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-background font-bold text-xs rounded-xl shadow transition-all">
+                                Connect Google Account
+                            </button>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            try {
+                if (container) container.innerHTML = '<p class="text-xs text-slate-text text-center py-8">Fetching live Google Tasks...</p>';
+                
+                const resp = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?showCompleted=true&showHidden=true', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!resp.ok) {
+                    throw new Error(`Tasks API returned status ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                googleTasksList = data.items || [];
+
+                if (countEl) countEl.innerText = `${googleTasksList.length} Tasks`;
+
+                if (googleTasksList.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-text text-center py-8">No tasks found in your default Google Tasks list. Click "+ New Task" to create one!</p>';
+                    return;
+                }
+
+                let html = '';
+                googleTasksList.forEach(task => {
+                    const isCompleted = task.status === 'completed';
+                    const dueDate = task.due ? new Date(task.due).toLocaleDateString() : '';
+                    
+                    html += `
+                        <div class="p-3.5 bg-surface-high border border-slate-border rounded-xl flex items-start justify-between gap-3 group transition-all">
+                            <div class="flex items-start gap-3 flex-1 overflow-hidden">
+                                <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleGoogleTaskComplete('${task.id}', this.checked)" class="mt-0.5 rounded bg-surface-low border-slate-border text-emerald-500 focus:ring-0 cursor-pointer">
+                                <div class="truncate">
+                                    <h4 class="text-xs font-semibold ${isCompleted ? 'line-through text-slate-text/60' : 'text-on-surface'} truncate">${escapeHtml(task.title || 'Untitled Task')}</h4>
+                                    ${task.notes ? `<p class="text-[11px] text-slate-text/80 mt-0.5 truncate">${escapeHtml(task.notes)}</p>` : ''}
+                                    ${dueDate ? `<span class="inline-flex items-center gap-1 text-[10px] text-emerald-400 mt-1 font-mono"><span class="material-symbols-outlined text-[12px]">calendar_today</span> Due ${dueDate}</span>` : ''}
+                                </div>
+                            </div>
+                            <button onclick="deleteGoogleTask('${task.id}')" title="Delete Task" class="text-slate-text hover:text-red-400 p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span class="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            } catch (err) {
+                console.error('Fetch Google Tasks error:', err);
+                if (container) {
+                    container.innerHTML = `<p class="text-xs text-amber-400 text-center py-8">Could not load Google Tasks. Ensure Google Tasks permission is granted.</p>`;
+                }
+            }
+        }
+
+        async function confirmCreateGoogleTask() {
+            const title = document.getElementById('new-task-title').value.trim();
+            const due = document.getElementById('new-task-due').value;
+            const notes = document.getElementById('new-task-notes').value.trim();
+            const token = getGoogleAccessToken();
+
+            if (!title) {
+                showToast('Please enter a task title', 'warning');
+                return;
+            }
+
+            if (!token) {
+                showToast('Please authorize Google Services first', 'warning');
+                return;
+            }
+
+            try {
+                const payload = {
+                    title: title,
+                    notes: notes || undefined,
+                    due: due ? new Date(due).toISOString() : undefined
+                };
+
+                const resp = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (resp.ok) {
+                    closeModal('modal-new-task');
+                    document.getElementById('new-task-title').value = '';
+                    document.getElementById('new-task-due').value = '';
+                    document.getElementById('new-task-notes').value = '';
+                    showToast('Task added to Google Tasks!', 'success');
+                    fetchGoogleTasks();
+                } else {
+                    showToast('Failed to add task to Google Tasks', 'error');
+                }
+            } catch (err) {
+                console.error('Create Google Task error:', err);
+                showToast('Error creating Google Task', 'error');
+            }
+        }
+
+        async function toggleGoogleTaskComplete(taskId, isCompleted) {
+            const token = getGoogleAccessToken();
+            if (!token) return;
+
+            try {
+                const resp = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${taskId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        status: isCompleted ? 'completed' : 'needsAction'
+                    })
+                });
+
+                if (resp.ok) {
+                    showToast(isCompleted ? 'Task completed!' : 'Task reopened', 'success');
+                    fetchGoogleTasks();
+                }
+            } catch (err) {
+                console.error('Toggle Task error:', err);
+            }
+        }
+
+        async function deleteGoogleTask(taskId) {
+            const token = getGoogleAccessToken();
+            if (!token) return;
+
+            if (!confirm('Delete this task from Google Tasks?')) return;
+
+            try {
+                const resp = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${taskId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (resp.ok || resp.status === 204) {
+                    showToast('Task deleted from Google Tasks', 'success');
+                    fetchGoogleTasks();
+                }
+            } catch (err) {
+                console.error('Delete task error:', err);
+            }
+        }
+
+
+        // ==========================================
+        // GOOGLE DOCS LOGIC
+        // ==========================================
+        async function fetchGoogleDocs() {
+            const container = document.getElementById('docs-list-grid');
+            const token = getGoogleAccessToken();
+
+            if (!token) {
+                if (container) {
+                    container.innerHTML = `
+                        <div class="col-span-full p-8 text-center space-y-3 bg-surface-low border border-slate-border rounded-2xl">
+                            <p class="text-xs text-slate-text">Authorize Google account to view and edit Google Docs directly.</p>
+                            <button onclick="authorizeGoogleCalendarOAuth()" class="px-3.5 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-xl shadow transition-all">
+                                Connect Google Docs
+                            </button>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            try {
+                if (container) container.innerHTML = '<p class="text-xs text-slate-text text-center py-8 col-span-full">Syncing Google Docs...</p>';
+
+                const url = `https://www.googleapis.com/drive/v3/files?q=mimeType%3D'application/vnd.google-apps.document'+and+trashed%3Dfalse&fields=files(id%2Cname%2CcreatedTime%2CmodifiedTime%2CwebViewLink)&pageSize=20`;
+                const resp = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!resp.ok) {
+                    throw new Error(`Drive API status ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                const files = data.files || [];
+
+                if (files.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-text text-center py-8 col-span-full">No Google Docs found. Click "+ New Google Doc" to create one!</p>';
+                    return;
+                }
+
+                let html = '';
+                files.forEach(doc => {
+                    html += `
+                        <div class="bg-surface-low border border-slate-border hover:border-blue-400/50 rounded-2xl p-4 flex flex-col justify-between gap-3 group transition-all">
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="material-symbols-outlined text-blue-400 text-2xl">description</span>
+                                    <span class="text-[10px] text-slate-text font-mono">${formatDate(doc.modifiedTime)}</span>
+                                </div>
+                                <h4 class="text-xs font-bold text-on-surface group-hover:text-blue-400 transition-colors truncate">${escapeHtml(doc.name || 'Untitled Document')}</h4>
+                            </div>
+                            <div class="flex items-center justify-between pt-2 border-t border-slate-border/50">
+                                <a href="${doc.webViewLink}" target="_blank" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all">
+                                    <span>Open Doc</span>
+                                    <span class="material-symbols-outlined text-xs">open_in_new</span>
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            } catch (err) {
+                console.error('Fetch Google Docs error:', err);
+                if (container) {
+                    container.innerHTML = `<p class="text-xs text-amber-400 text-center py-8 col-span-full">Error fetching Google Docs. Please check scope permissions.</p>`;
+                }
+            }
+        }
+
+        async function confirmCreateGoogleDoc() {
+            const title = document.getElementById('new-doc-title').value.trim();
+            const token = getGoogleAccessToken();
+
+            if (!title) {
+                showToast('Please enter a document title', 'warning');
+                return;
+            }
+
+            if (!token) {
+                showToast('Please authorize Google Services first', 'warning');
+                return;
+            }
+
+            try {
+                const resp = await fetch('https://docs.googleapis.com/v1/documents', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: title })
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    closeModal('modal-new-doc');
+                    document.getElementById('new-doc-title').value = '';
+                    showToast('Google Doc created successfully!', 'success');
+                    if (data.documentId) {
+                        window.open(`https://docs.google.com/document/d/${data.documentId}/edit`, '_blank');
+                    }
+                    fetchGoogleDocs();
+                } else {
+                    showToast('Failed to create Google Doc', 'error');
+                }
+            } catch (err) {
+                console.error('Create Google Doc error:', err);
+                showToast('Error creating Google Doc', 'error');
+            }
+        }
+
+
+        // ==========================================
+        // GOOGLE DRIVE & FILE PICKER LOGIC
+        // ==========================================
+        async function fetchGoogleDriveFiles() {
+            const container = document.getElementById('drive-files-grid');
+            const token = getGoogleAccessToken();
+
+            if (!token) {
+                if (container) {
+                    container.innerHTML = `
+                        <div class="col-span-full p-8 text-center space-y-3 bg-surface-low border border-slate-border rounded-2xl">
+                            <p class="text-xs text-slate-text">Connect Google account to search and pick Google Drive files.</p>
+                            <button onclick="authorizeGoogleCalendarOAuth()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all">
+                                Connect Google Drive
+                            </button>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            try {
+                if (container) container.innerHTML = '<p class="text-xs text-slate-text text-center py-8 col-span-full">Fetching Google Drive files...</p>';
+
+                const url = `https://www.googleapis.com/drive/v3/files?q=trashed%3Dfalse&fields=files(id%2Cname%2CmimeType%2CwebViewLink%2CiconLink%2CmodifiedTime)&pageSize=24`;
+                const resp = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!resp.ok) {
+                    throw new Error(`Drive API returned ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                const files = data.files || [];
+
+                if (files.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-text text-center py-8 col-span-full">No Google Drive files found.</p>';
+                    return;
+                }
+
+                let html = '';
+                files.forEach(f => {
+                    html += `
+                        <div class="bg-surface-low border border-slate-border hover:border-purple-400/50 rounded-2xl p-4 flex flex-col justify-between gap-3 group transition-all">
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="material-symbols-outlined text-purple-400 text-2xl">folder_shared</span>
+                                    <span class="text-[10px] text-slate-text font-mono">${formatDate(f.modifiedTime)}</span>
+                                </div>
+                                <h4 class="text-xs font-bold text-on-surface group-hover:text-purple-400 transition-colors truncate">${escapeHtml(f.name || 'Untitled File')}</h4>
+                            </div>
+                            <div class="flex items-center justify-between pt-2 border-t border-slate-border/50">
+                                <button onclick="importDriveLinkToNote('${escapeHtml(f.name)}', '${f.webViewLink}')" class="px-2.5 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-xl text-xs font-semibold transition-all">
+                                    + Attach to Note
+                                </button>
+                                <a href="${f.webViewLink}" target="_blank" class="text-slate-text hover:text-on-surface text-xs font-semibold flex items-center gap-1">
+                                    <span>View</span> <span class="material-symbols-outlined text-xs">open_in_new</span>
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            } catch (err) {
+                console.error('Fetch Drive files error:', err);
+                if (container) {
+                    container.innerHTML = `<p class="text-xs text-amber-400 text-center py-8 col-span-full">Error fetching Google Drive files.</p>`;
+                }
+            }
+        }
+
+        function openGoogleDrivePicker() {
+            fetchGoogleDriveFiles();
+            showToast('Google Drive files synced!', 'success');
+        }
+
+        function importDriveLinkToNote(fileName, link) {
+            switchView('workspace');
+            const editor = document.getElementById('editor-content');
+            if (editor) {
+                const markdownLink = `\n📎 [${fileName}](${link})\n`;
+                editor.value += markdownLink;
+                triggerAutoSave();
+                showToast(`Attached "${fileName}" link to active note!`, 'success');
+            }
+        }
+
+
+        // ==========================================
+        // GMAIL INBOX & ACTIONS LOGIC
+        // ==========================================
+        async function fetchGmailMessages() {
+            const container = document.getElementById('gmail-messages-list');
+            const countEl = document.getElementById('gmail-messages-count');
+            const token = getGoogleAccessToken();
+
+            if (!token) {
+                if (container) {
+                    container.innerHTML = `
+                        <div class="p-6 text-center space-y-3">
+                            <p class="text-xs text-slate-text">Authorize Google account to view Gmail messages and compose emails.</p>
+                            <button onclick="authorizeGoogleCalendarOAuth()" class="px-3.5 py-2 bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs rounded-xl shadow transition-all">
+                                Connect Gmail
+                            </button>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            try {
+                if (container) container.innerHTML = '<p class="text-xs text-slate-text text-center py-8">Loading Gmail messages...</p>';
+
+                const listResp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=8', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!listResp.ok) {
+                    throw new Error(`Gmail API returned ${listResp.status}`);
+                }
+
+                const listData = await listResp.json();
+                const messages = listData.messages || [];
+
+                if (countEl) countEl.innerText = `${messages.length} Messages`;
+
+                if (messages.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-text text-center py-8">No messages in your Gmail inbox.</p>';
+                    return;
+                }
+
+                let html = '';
+                for (const msgRef of messages) {
+                    const detailResp = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgRef.id}?format=full`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (detailResp.ok) {
+                        const msg = await detailResp.json();
+                        const headers = msg.payload?.headers || [];
+                        const subject = headers.find(h => h.name.toLowerCase() === 'subject')?.value || '(No Subject)';
+                        const from = headers.find(h => h.name.toLowerCase() === 'from')?.value || 'Unknown Sender';
+                        const snippet = msg.snippet || '';
+
+                        html += `
+                            <div class="p-3.5 bg-surface-high border border-slate-border rounded-xl space-y-1.5 hover:border-rose-400/50 transition-all">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-rose-400 truncate max-w-[220px]">${escapeHtml(from)}</span>
+                                    <span class="text-[10px] text-slate-text font-mono">${formatDate(msg.internalDate ? new Date(parseInt(msg.internalDate)).toISOString() : null)}</span>
+                                </div>
+                                <h4 class="text-xs font-semibold text-on-surface truncate">${escapeHtml(subject)}</h4>
+                                <p class="text-[11px] text-slate-text line-clamp-2">${escapeHtml(snippet)}</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                container.innerHTML = html || '<p class="text-xs text-slate-text text-center py-8">Inbox is empty.</p>';
+            } catch (err) {
+                console.error('Fetch Gmail error:', err);
+                if (container) {
+                    container.innerHTML = `<p class="text-xs text-amber-400 text-center py-8">Error fetching Gmail messages. Verify Gmail scope authorization.</p>`;
+                }
+            }
+        }
+
+        async function confirmSendGmailEmail() {
+            const to = document.getElementById('compose-to').value.trim();
+            const subject = document.getElementById('compose-subject').value.trim();
+            const body = document.getElementById('compose-body').value.trim();
+            const token = getGoogleAccessToken();
+
+            if (!to || !subject || !body) {
+                showToast('Please fill out all email fields', 'warning');
+                return;
+            }
+
+            if (!token) {
+                showToast('Please authorize Google Services first', 'warning');
+                return;
+            }
+
+            try {
+                const emailContent = [
+                    `To: ${to}`,
+                    'Content-Type: text/plain; charset=utf-8',
+                    'MIME-Version: 1.0',
+                    `Subject: ${subject}`,
+                    '',
+                    body
+                ].join('\n');
+
+                const base64EncodedEmail = btoa(unescape(encodeURIComponent(emailContent)))
+                    .replace(/\+/g, '-')
+                    .replace(/\//g, '_')
+                    .replace(/=+$/, '');
+
+                const resp = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ raw: base64EncodedEmail })
+                });
+
+                if (resp.ok) {
+                    closeModal('modal-compose-email');
+                    document.getElementById('compose-to').value = '';
+                    document.getElementById('compose-subject').value = '';
+                    document.getElementById('compose-body').value = '';
+                    showToast('Email sent via Gmail successfully!', 'success');
+                    fetchGmailMessages();
+                } else {
+                    showToast('Failed to send email via Gmail', 'error');
+                }
+            } catch (err) {
+                console.error('Send Gmail error:', err);
+                showToast('Error sending email via Gmail', 'error');
+            }
+        }
+
+        async function fetchGoogleCalendarEvents() {
+            const badge = document.getElementById('calendar-auth-badge');
+
+            if (!googleCalendarAccessToken) {
+                if (badge) {
+                    badge.innerText = 'Not Synced';
+                    badge.className = 'text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono';
+                }
+                renderCalendar();
+                renderCalendarEventsList();
+                return;
+            }
+
+            try {
+                if (badge) {
+                    badge.innerText = 'Syncing...';
+                    badge.className = 'text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-md font-mono';
+                }
+
+                // Fetch events window around current month
+                const year = currentCalendarDate.getFullYear();
+                const month = currentCalendarDate.getMonth();
+                const startWindow = new Date(year, month - 1, 1).toISOString();
+                const endWindow = new Date(year, month + 2, 0).toISOString();
+
+                const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(startWindow)}&timeMax=${encodeURIComponent(endWindow)}&singleEvents=true&orderBy=startTime`;
+
+                const resp = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${googleCalendarAccessToken}`
+                    }
+                });
+
+                if (!resp.ok) {
+                    if (resp.status === 401) {
+                        googleCalendarAccessToken = null;
+                        showToast('Google Calendar session expired. Click Sync to reconnect.', 'warning');
+                        fetchGoogleCalendarEvents();
+                        return;
+                    }
+                    throw new Error(`Calendar API returned status ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                calendarEvents = data.items || [];
+
+                if (badge) {
+                    badge.innerText = 'Live Synced';
+                    badge.className = 'text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-mono';
+                }
+
+                renderCalendar();
+                renderCalendarEventsList();
+            } catch (err) {
+                console.error('Failed to fetch Google Calendar events:', err);
+                if (badge) {
+                    badge.innerText = 'Sync Error';
+                    badge.className = 'text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-md font-mono';
+                }
+                showToast('Error syncing Google Calendar events.', 'error');
+            }
+        }
+
         function renderCalendar() {
             const monthYearLabel = document.getElementById('calendar-month-year');
             const daysGrid = document.getElementById('calendar-days-grid');
+            if (!monthYearLabel || !daysGrid) return;
 
             const year = currentCalendarDate.getFullYear();
             const month = currentCalendarDate.getMonth();
@@ -1611,9 +2602,31 @@
             const today = new Date();
             for (let d = 1; d <= daysInMonth; d++) {
                 const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+                
+                // Check if date has Google Calendar events
+                const hasEvents = calendarEvents.some(ev => {
+                    const startStr = ev.start?.dateTime || ev.start?.date;
+                    if (!startStr) return false;
+                    const evDate = new Date(startStr);
+                    return evDate.getFullYear() === year && evDate.getMonth() === month && evDate.getDate() === d;
+                });
+
+                const isSelected = selectedCalendarDate && 
+                    selectedCalendarDate.getFullYear() === year && 
+                    selectedCalendarDate.getMonth() === month && 
+                    selectedCalendarDate.getDate() === d;
+
+                let bgClass = 'hover:bg-surface-high text-slate-text';
+                if (isToday) {
+                    bgClass = 'bg-primary text-background font-bold shadow';
+                } else if (isSelected) {
+                    bgClass = 'bg-primary/20 text-primary font-bold border border-primary/40';
+                }
+
                 html += `
-                    <div class="py-1 cursor-pointer hover:bg-surface-high rounded-lg font-medium ${isToday ? 'bg-primary text-background font-bold shadow' : 'text-slate-text'}">
-                        ${d}
+                    <div onclick="selectCalendarDate(${year}, ${month}, ${d})" class="py-1 px-0.5 cursor-pointer rounded-lg font-medium relative transition-all ${bgClass}">
+                        <div>${d}</div>
+                        ${hasEvents ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute bottom-0.5 left-1/2 transform -translate-x-1/2"></span>` : ''}
                     </div>
                 `;
             }
@@ -1623,7 +2636,191 @@
 
         function changeCalendarMonth(delta) {
             currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+            fetchGoogleCalendarEvents();
+        }
+
+        function selectCalendarDate(year, month, day) {
+            selectedCalendarDate = new Date(year, month, day);
             renderCalendar();
+            renderCalendarEventsList();
+        }
+
+        function clearSelectedCalendarDate() {
+            selectedCalendarDate = null;
+            renderCalendar();
+            renderCalendarEventsList();
+        }
+
+        function renderCalendarEventsList() {
+            const container = document.getElementById('calendar-events-list');
+            if (!container) return;
+
+            if (!googleCalendarAccessToken) {
+                container.innerHTML = `
+                    <div class="text-center py-4 space-y-2">
+                        <p class="text-[11px] text-slate-text">Connect Google Calendar to sync live events.</p>
+                        <button onclick="authorizeGoogleCalendarOAuth()" class="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm">sync</span>
+                            <span>Sync Google Calendar</span>
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            let filtered = calendarEvents;
+            let headerText = 'Google Calendar Events';
+
+            if (selectedCalendarDate) {
+                const selYear = selectedCalendarDate.getFullYear();
+                const selMonth = selectedCalendarDate.getMonth();
+                const selDay = selectedCalendarDate.getDate();
+
+                filtered = calendarEvents.filter(ev => {
+                    const startStr = ev.start?.dateTime || ev.start?.date;
+                    if (!startStr) return false;
+                    const evDate = new Date(startStr);
+                    return evDate.getFullYear() === selYear && evDate.getMonth() === selMonth && evDate.getDate() === selDay;
+                });
+
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                headerText = `Events on ${monthNames[selMonth]} ${selDay}, ${selYear}`;
+            }
+
+            const headerEl = document.getElementById('calendar-events-header-text');
+            if (headerEl) {
+                headerEl.innerHTML = `<span class="material-symbols-outlined text-primary text-xs">event_note</span> ${headerText}`;
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-4 text-xs text-slate-text space-y-1">
+                        <p>No Google Calendar events ${selectedCalendarDate ? 'for this day' : 'found'}.</p>
+                        ${selectedCalendarDate ? `<button onclick="clearSelectedCalendarDate()" class="text-primary hover:underline text-[11px]">Show all upcoming</button>` : ''}
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(ev => {
+                const startStr = ev.start?.dateTime || ev.start?.date;
+                let timeFormatted = 'All Day';
+                if (ev.start?.dateTime) {
+                    const d = new Date(ev.start.dateTime);
+                    timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                html += `
+                    <div class="p-2.5 bg-surface-high/60 border border-slate-border hover:border-primary/40 rounded-xl space-y-1 transition-all text-left">
+                        <div class="flex items-start justify-between gap-2">
+                            <h5 class="text-xs font-semibold text-on-surface line-clamp-1">${escapeHtml(ev.summary || 'Untitled Event')}</h5>
+                            <span class="text-[10px] bg-primary/10 text-primary font-mono px-1.5 py-0.5 rounded flex-shrink-0">${timeFormatted}</span>
+                        </div>
+                        ${ev.location ? `<p class="text-[10px] text-slate-text flex items-center gap-1 truncate"><span class="material-symbols-outlined text-xs">location_on</span> ${escapeHtml(ev.location)}</p>` : ''}
+                        ${ev.description ? `<p class="text-[10px] text-slate-text/80 line-clamp-2">${escapeHtml(ev.description)}</p>` : ''}
+                        <div class="flex items-center justify-between pt-1 text-[10px]">
+                            ${ev.htmlLink ? `<a href="${ev.htmlLink}" target="_blank" class="text-primary hover:underline flex items-center gap-0.5"><span class="material-symbols-outlined text-xs">open_in_new</span> Google Calendar</a>` : '<span></span>'}
+                            <button onclick="confirmDeleteCalendarEvent('${ev.id}')" class="text-slate-text hover:text-red-400 p-0.5" title="Delete event">
+                                <span class="material-symbols-outlined text-xs">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function createNewCalendarEvent(eventData) {
+            if (!googleCalendarAccessToken) {
+                showToast('Please sync Google Calendar first.', 'warning');
+                return;
+            }
+
+            const confirmed = window.confirm(`Confirm: Add event "${eventData.summary}" to your Google Calendar?`);
+            if (!confirmed) return;
+
+            try {
+                const resp = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${googleCalendarAccessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(eventData)
+                });
+
+                if (resp.ok) {
+                    showToast('Event added to Google Calendar!', 'success');
+                    closeModal('modal-new-calendar-event');
+                    await fetchGoogleCalendarEvents();
+                } else {
+                    const errJson = await resp.json();
+                    showToast('Error adding event: ' + (errJson.error?.message || 'Failed'), 'error');
+                }
+            } catch (err) {
+                console.error('Create event error:', err);
+                showToast('Failed to create calendar event.', 'error');
+            }
+        }
+
+        async function submitNewCalendarEvent() {
+            const summary = document.getElementById('new-cal-title').value.trim();
+            const startVal = document.getElementById('new-cal-start').value;
+            const endVal = document.getElementById('new-cal-end').value;
+            const location = document.getElementById('new-cal-location').value.trim();
+            const description = document.getElementById('new-cal-description').value.trim();
+
+            if (!summary) {
+                showToast('Please enter an event title', 'warning');
+                return;
+            }
+            if (!startVal || !endVal) {
+                showToast('Please specify start and end date/time', 'warning');
+                return;
+            }
+
+            const eventData = {
+                summary: summary,
+                location: location || undefined,
+                description: description || undefined,
+                start: {
+                    dateTime: new Date(startVal).toISOString()
+                },
+                end: {
+                    dateTime: new Date(endVal).toISOString()
+                }
+            };
+
+            await createNewCalendarEvent(eventData);
+        }
+
+        async function confirmDeleteCalendarEvent(eventId) {
+            const ev = calendarEvents.find(e => e.id === eventId);
+            const summary = ev ? ev.summary : 'this event';
+
+            const confirmed = window.confirm(`Are you sure you want to delete "${summary}" from your Google Calendar?`);
+            if (!confirmed) return;
+
+            try {
+                const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${googleCalendarAccessToken}`
+                    }
+                });
+
+                if (resp.ok || resp.status === 204) {
+                    showToast('Event deleted from Google Calendar.', 'success');
+                    await fetchGoogleCalendarEvents();
+                } else {
+                    showToast('Failed to delete event from Google Calendar.', 'error');
+                }
+            } catch (err) {
+                console.error('Delete event error:', err);
+                showToast('Error deleting calendar event.', 'error');
+            }
         }
 
         // Right Sidebar Toggle

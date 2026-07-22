@@ -273,6 +273,7 @@ def api_health():
 @app.route("/api/v1/projects", methods=["GET", "POST"])
 @require_auth
 def projects_api():
+    global IN_MEMORY_PROJECTS
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "GET":
@@ -337,6 +338,7 @@ def delete_project_api(project_id):
 @app.route("/api/v1/projects/<project_id>/files", methods=["GET", "POST"])
 @require_auth
 def project_files_api(project_id):
+    global IN_MEMORY_FILES
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "GET":
@@ -436,6 +438,7 @@ def update_delete_file_api(project_id, file_id):
 @app.route("/api/v1/notes", methods=["GET", "POST"])
 @require_auth
 def notes_direct_api():
+    global IN_MEMORY_FILES, IN_MEMORY_PROJECTS
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "GET":
@@ -576,6 +579,7 @@ def note_detail_direct_api(note_id):
 @app.route("/api/v1/notes/<note_id>/versions", methods=["GET"])
 @require_auth
 def get_note_versions_api(note_id):
+    global IN_MEMORY_VERSIONS
     versions = []
     if db:
         try:
@@ -594,6 +598,7 @@ def get_note_versions_api(note_id):
 @app.route("/api/v1/notes/<note_id>/restore", methods=["POST"])
 @require_auth
 def restore_note_version_api(note_id):
+    global IN_MEMORY_FILES, IN_MEMORY_VERSIONS
     uid = getattr(request, 'user_id', 'demo_user')
     data = request.get_json() or {}
     version_id = data.get("version_id")
@@ -645,6 +650,7 @@ def restore_note_version_api(note_id):
 @app.route("/api/v1/search", methods=["GET"])
 @require_auth
 def global_search_api():
+    global IN_MEMORY_FILES, IN_MEMORY_PROJECTS
     uid = getattr(request, 'user_id', 'demo_user')
     q = (request.args.get("q") or "").strip().lower()
 
@@ -688,6 +694,7 @@ def global_search_api():
 @app.route("/api/v1/projects/<project_id>/files/<file_id>/copy", methods=["POST"])
 @require_auth
 def copy_file_api(project_id, file_id):
+    global IN_MEMORY_FILES
     uid = getattr(request, 'user_id', 'demo_user')
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -744,6 +751,7 @@ def copy_file_api(project_id, file_id):
 @app.route("/api/v1/developer/keys", methods=["GET", "POST"])
 @require_auth
 def developer_keys_api():
+    global IN_MEMORY_KEYS
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "GET":
@@ -815,6 +823,7 @@ IN_MEMORY_KEEP_NOTES = [
 
 @app.route("/api/v1/keep/notes", methods=["GET", "POST"])
 def google_keep_notes_proxy():
+    global IN_MEMORY_KEEP_NOTES
     auth_header = request.headers.get("Authorization")
     token = None
     if auth_header and auth_header.startswith("Bearer "):
