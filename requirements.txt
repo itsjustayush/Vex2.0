@@ -1,8 +1,7 @@
-Flask==3.0.3
-firebase-admin==6.5.0
-python-dotenv==1.0.1
-httpx==0.27.0
-requests==2.31.0
+Flask
+firebase-admin
+requests
+httpx
+PyJWT
 google-generativeai>=0.8.0
-PyJWT==2.8.0
-
+python-dotenv

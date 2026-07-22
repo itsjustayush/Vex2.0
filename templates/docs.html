@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
-<title>Vex API Documentation & Reference</title>
+<title>Vex API Documentation & Interactive Reference</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
 <script>
     tailwind.config = {
@@ -16,22 +16,19 @@
                     "background-light": "#ffffff",
                     "background-dark": "#131316", // Vex background
                     "surface-light": "#f4f4f5",
-                    "surface-dark": "#1b1b1e", // Vex surface-low
+                    "surface-dark": "#1b1b1e", // Vex surface
                     "border-light": "#e4e4e7",
-                    "border-dark": "#27272A", // Vex slate-border
+                    "border-dark": "#27272a",
                 },
                 fontFamily: {
                     display: ["Inter", "sans-serif"],
                     mono: ["JetBrains Mono", "monospace"],
                 },
-                borderRadius: {
-                    DEFAULT: "0.5rem",
-                },
             },
         },
     };
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <!-- Firebase App (Compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -50,79 +47,105 @@
 </script>
 <style>
     body { font-family: 'Inter', sans-serif; }
-    code, pre { font-family: 'JetBrains Mono', monospace; }
+    code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
     .glass-panel {
-        background: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(12px);
     }
     html.dark .glass-panel {
-        background: rgba(27, 27, 30, 0.8);
+        background: rgba(19, 19, 22, 0.85);
     }
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+    .code-tab-btn.active {
+        color: #63dac3;
+        border-bottom: 2px solid #63dac3;
+    }
 </style>
 </head>
 <body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-200 antialiased min-h-screen flex flex-col transition-colors duration-200">
 
+<!-- Top Navigation Bar -->
 <nav class="fixed top-0 inset-x-0 z-50 h-16 border-b border-border-light dark:border-border-dark glass-panel flex items-center justify-between px-6">
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-4">
         <a href="/dashboard" class="flex items-center gap-2">
             <div class="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center">
                 <span class="material-icons text-primary text-xl">bolt</span>
             </div>
-            <span class="text-xl font-bold text-slate-900 dark:text-white">Vex API</span>
+            <span class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Vex API</span>
         </a>
-        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">v1.0 REST API</span>
+        <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">v1.0 REST</span>
+    </div>
+
+    <!-- Live Auth API Key Header Control -->
+    <div class="hidden md:flex items-center gap-3">
+        <div class="flex items-center gap-2 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark px-3 py-1.5 rounded-xl">
+            <span class="material-icons text-primary text-sm">key</span>
+            <span class="text-xs text-slate-500 font-mono">Token:</span>
+            <input type="text" id="global-auth-token" placeholder="Bearer Token or vex_live_..." class="bg-transparent border-none text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none w-48 sm:w-64" value="demo-token">
+            <button onclick="autoFillMyToken()" title="Auto-fill session token" class="text-primary hover:text-primary-hover text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 border border-primary/20 transition-all">
+                Auto-Fill
+            </button>
+        </div>
     </div>
     
-    <div class="flex items-center gap-6 text-sm font-medium">
+    <div class="flex items-center gap-5 text-sm font-medium">
         <a class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="/dashboard">Dashboard</a>
-        <a class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="/settings">Settings & Keys</a>
-        <div class="w-px h-5 bg-border-light dark:bg-border-dark mx-1"></div>
-        <button class="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" id="themeToggle" title="Toggle Theme">
+        <a class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="/settings">Settings</a>
+        <div class="w-px h-5 bg-border-light dark:bg-border-dark"></div>
+        <button class="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" id="themeToggle" title="Toggle Dark/Light Mode">
             <span class="material-icons hidden dark:block text-[20px]">light_mode</span>
             <span class="material-icons block dark:hidden text-[20px]">dark_mode</span>
         </button>
     </div>
 </nav>
 
-<div class="flex flex-1 pt-16">
+<div class="flex flex-1 pt-16 min-h-screen">
     <!-- Sidebar Navigation -->
     <aside class="fixed inset-y-0 left-0 pt-20 w-64 border-r border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark overflow-y-auto hidden lg:block custom-scrollbar">
-        <nav class="px-6 pb-10">
-            <div class="mb-8">
-                <h3 class="font-semibold text-slate-900 dark:text-white mb-3 text-xs uppercase tracking-wider text-slate-500">Getting Started</h3>
-                <ul class="space-y-2 border-l border-border-light dark:border-border-dark ml-2 pl-3">
-                    <li><a class="block text-sm text-primary font-medium hover:text-primary" href="#overview">Overview</a></li>
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#authentication">Authentication & Generator</a></li>
-                </ul>
-            </div>
-            <div class="mb-8">
-                <h3 class="font-semibold text-slate-900 dark:text-white mb-3 text-xs uppercase tracking-wider text-slate-500">Projects API</h3>
-                <ul class="space-y-2 border-l border-border-light dark:border-border-dark ml-2 pl-3">
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#get-projects">List Projects</a></li>
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#create-project">Create Project</a></li>
-                </ul>
-            </div>
-            <div class="mb-8">
-                <h3 class="font-semibold text-slate-900 dark:text-white mb-3 text-xs uppercase tracking-wider text-slate-500">Files & Notes API</h3>
-                <ul class="space-y-2 border-l border-border-light dark:border-border-dark ml-2 pl-3">
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#get-files">List Files in Project</a></li>
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#create-file">Create File / Note</a></li>
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#copy-file">Duplicate File / Note</a></li>
-                </ul>
-            </div>
-            <div class="mb-8">
-                <h3 class="font-semibold text-slate-900 dark:text-white mb-3 text-xs uppercase tracking-wider text-slate-500">Developer Keys</h3>
-                <ul class="space-y-2 border-l border-border-light dark:border-border-dark ml-2 pl-3">
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#developer-keys">Manage Developer Keys</a></li>
+        <nav class="px-6 pb-12 space-y-6">
+            <div>
+                <h3 class="font-bold text-slate-400 dark:text-slate-500 mb-2 text-[11px] uppercase tracking-wider">Overview</h3>
+                <ul class="space-y-1.5 border-l border-border-light dark:border-border-dark ml-2 pl-3 text-xs">
+                    <li><a class="block text-primary font-medium hover:text-primary" href="#overview">Introduction</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#authentication">Authentication</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#health-check">System Health</a></li>
                 </ul>
             </div>
             <div>
-                <h3 class="font-semibold text-slate-900 dark:text-white mb-3 text-xs uppercase tracking-wider text-slate-500">Search API</h3>
-                <ul class="space-y-2 border-l border-border-light dark:border-border-dark ml-2 pl-3">
-                    <li><a class="block text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#global-search">Global Search</a></li>
+                <h3 class="font-bold text-slate-400 dark:text-slate-500 mb-2 text-[11px] uppercase tracking-wider">Projects</h3>
+                <ul class="space-y-1.5 border-l border-border-light dark:border-border-dark ml-2 pl-3 text-xs">
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#get-projects">GET /api/v1/projects</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#create-project">POST /api/v1/projects</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-400 dark:text-slate-500 mb-2 text-[11px] uppercase tracking-wider">Notes & Files</h3>
+                <ul class="space-y-1.5 border-l border-border-light dark:border-border-dark ml-2 pl-3 text-xs">
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#get-notes">GET /api/v1/notes</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#create-note">POST /api/v1/notes</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#get-note-detail">GET /api/v1/notes/{id}</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-400 dark:text-slate-500 mb-2 text-[11px] uppercase tracking-wider">Vex AI Engine</h3>
+                <ul class="space-y-1.5 border-l border-border-light dark:border-border-dark ml-2 pl-3 text-xs">
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#ai-chat">POST /api/v1/ai/chat</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-400 dark:text-slate-500 mb-2 text-[11px] uppercase tracking-wider">Developer Keys</h3>
+                <ul class="space-y-1.5 border-l border-border-light dark:border-border-dark ml-2 pl-3 text-xs">
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#get-keys">GET /api/v1/developer/keys</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#create-key">POST /api/v1/developer/keys</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-400 dark:text-slate-500 mb-2 text-[11px] uppercase tracking-wider">Search & Google Keep</h3>
+                <ul class="space-y-1.5 border-l border-border-light dark:border-border-dark ml-2 pl-3 text-xs">
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#global-search">GET /api/v1/search</a></li>
+                    <li><a class="block text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" href="#google-keep">GET /api/v1/keep/notes</a></li>
                 </ul>
             </div>
         </nav>
@@ -132,71 +155,123 @@
     <main class="flex-1 lg:pl-64 min-w-0">
         
         <!-- Header Banner -->
-        <div class="pt-12 pb-10 px-8 xl:px-12 border-b border-border-light dark:border-border-dark bg-surface-light/50 dark:bg-surface-dark/30" id="overview">
-            <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-3">Vex REST API Reference</h1>
-            <p class="text-slate-600 dark:text-slate-400 text-base max-w-3xl leading-relaxed">
-                The Vex REST API allows developers to programmatically create projects, extract notes, organize workspace files, and perform global searches. All requests are stateless and authenticated using Bearer tokens or Developer API Keys.
-            </p>
+        <div class="pt-10 pb-8 px-6 lg:px-12 border-b border-border-light dark:border-border-dark bg-surface-light/40 dark:bg-surface-dark/40" id="overview">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-2">Vex REST API Reference</h1>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm max-w-3xl leading-relaxed">
+                        The Vex REST API enables full programmatic access to workspace projects, notes, Gemini AI synthesis, and developer API keys. Every endpoint supports live real-time execution directly from this interactive documentation panel.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-xl text-xs font-semibold">
+                    <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                    Base URL: <code class="font-mono text-slate-800 dark:text-slate-200 ml-1">/api/v1</code>
+                </div>
+            </div>
         </div>
 
-        <div class="px-8 xl:px-12 py-10 space-y-16 max-w-7xl">
+        <div class="px-6 lg:px-12 py-10 space-y-16">
             
-            <!-- SECTION: AUTHENTICATION & INTERACTIVE GENERATOR -->
+            <!-- SECTION: AUTHENTICATION -->
             <section id="authentication" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <!-- Left Explanation Column -->
-                    <div class="lg:col-span-6 space-y-4">
-                        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold uppercase tracking-wider">
-                            <span class="material-symbols-outlined text-sm">lock</span> Hybrid Auth Guard
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <!-- Left Description Column -->
+                    <div class="xl:col-span-6 space-y-4">
+                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold uppercase tracking-wider">
+                            <span class="material-icons text-sm">lock</span> Bearer & API Key Auth
                         </div>
                         <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Authentication</h2>
                         <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Every request to the Vex API requires a valid Bearer token in the <code>Authorization</code> header:
+                            Pass your access token in the standard HTTP <code class="text-primary font-mono">Authorization</code> header or <code class="text-primary font-mono">X-API-Key</code> header:
                         </p>
                         <div class="bg-surface-light dark:bg-[#1b1b1e] border border-border-light dark:border-border-dark rounded-xl p-3 font-mono text-xs text-slate-800 dark:text-slate-200">
-                            Authorization: Bearer &lt;YOUR_TOKEN&gt;
+                            Authorization: Bearer &lt;YOUR_API_KEY_OR_TOKEN&gt;
                         </div>
-                        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            You can authenticate using either:
-                        </p>
-                        <ul class="list-disc list-inside text-xs text-slate-600 dark:text-slate-400 space-y-1 pl-1">
-                            <li><strong class="text-slate-800 dark:text-slate-200">OpenAI / Gemini-Style API Key</strong> (Starts with <code>vex_live_...</code>, generated in Settings or via API)</li>
-                            <li><strong class="text-slate-800 dark:text-slate-200">Firebase ID Session Token</strong> (Short-lived, generated automatically when logged in)</li>
-                        </ul>
-
-                        <!-- Interactive Auth Generator Box -->
-                        <div class="bg-surface-light dark:bg-surface-dark border border-primary/30 p-5 rounded-2xl space-y-3 mt-6 shadow-sm">
-                            <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <span class="material-icons text-primary text-base">key</span> Interactive Auth Generator
-                            </h3>
-                            <p class="text-xs text-slate-600 dark:text-slate-400">
-                                Click below to copy your active session Firebase Bearer token directly to your clipboard for instant testing in cURL or Postman.
-                            </p>
-                            <div class="flex flex-wrap items-center gap-3 pt-1">
-                                <button onclick="copyMyLiveToken()" id="copy-my-token-btn" class="bg-primary hover:bg-primary-hover text-background font-bold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5">
-                                    <span class="material-icons text-sm">content_copy</span> Copy My Live Bearer Token
-                                </button>
-                                <a href="/settings" class="bg-surface-light dark:bg-[#27272a] hover:bg-border-light dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-border-light dark:border-border-dark font-semibold px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5">
-                                    <span class="material-icons text-sm">settings</span> Manage API Keys
-                                </a>
-                            </div>
-                            <div id="auth-status-msg" class="text-[11px] font-mono text-slate-500 pt-1"></div>
+                        <div class="space-y-2 text-xs text-slate-600 dark:text-slate-400 pt-1">
+                            <p><strong class="text-slate-800 dark:text-slate-200">Supported Token Formats:</strong></p>
+                            <ul class="list-disc list-inside space-y-1 pl-1">
+                                <li><code>vex_live_...</code> - Developer API Keys (created via Settings or Keys API)</li>
+                                <li><code>Bearer &lt;Firebase_JWT&gt;</code> - Session token from user login</li>
+                                <li><code>demo-token</code> - Built-in fallback token for quick local testing</li>
+                            </ul>
                         </div>
                     </div>
 
-                    <!-- Right Code Snippet Panel -->
-                    <div class="lg:col-span-6">
+                    <!-- Right Code Snippet & Live Tester Panel -->
+                    <div class="xl:col-span-6">
                         <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-3 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span class="font-mono text-slate-300">cURL Example</span>
-                                <button onclick="copySnippet('curl-auth')" class="hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                            <div class="flex items-center justify-between px-4 py-3 bg-[#18181b] border-b border-border-dark text-xs text-slate-400 font-mono">
+                                <span class="text-slate-300 font-bold">Authentication Example</span>
+                                <button onclick="copySnippet('auth-curl')" class="hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy cURL
+                                </button>
+                            </div>
+                            <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
+<pre id="auth-curl">curl -X GET "http://localhost:3000/api/v1/projects" \
+  -H "Authorization: Bearer vex_live_your_api_key" \
+  -H "Content-Type: application/json"</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <hr class="border-border-light dark:border-border-dark">
+
+            <!-- SECTION: HEALTH CHECK -->
+            <section id="health-check" class="scroll-mt-24">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
+                        <div class="flex items-center gap-3">
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">GET</span>
+                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/health</code>
+                        </div>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">System Health Check</h2>
+                        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                            Public endpoint to verify server status, Firestore connectivity, and Gemini AI key readiness. Does not require authentication.
+                        </p>
+                    </div>
+
+                    <div class="xl:col-span-6 space-y-3">
+                        <!-- Code Snippet Tabs -->
+                        <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <div class="flex gap-4">
+                                    <button onclick="switchTab('health', 'curl')" id="health-tab-curl" class="code-tab-btn active text-slate-300 pb-0.5">cURL</button>
+                                    <button onclick="switchTab('health', 'python')" id="health-tab-python" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">Python</button>
+                                    <button onclick="switchTab('health', 'js')" id="health-tab-js" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">JavaScript</button>
+                                </div>
+                                <button onclick="copyCurrentSnippet('health')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
                                     <span class="material-icons text-xs">content_copy</span> Copy
                                 </button>
                             </div>
                             <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre id="curl-auth">curl -X GET https://api.vex.io/api/v1/projects \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Content-Type: application/json"</pre>
+                                <pre id="health-code-curl">curl -X GET "http://localhost:3000/api/health"</pre>
+                                <pre id="health-code-python" class="hidden">import requests
+res = requests.get("http://localhost:3000/api/health")
+print(res.json())</pre>
+                                <pre id="health-code-js" class="hidden">fetch('/api/health')
+  .then(res => res.json())
+  .then(console.log);</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable Test Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">play_arrow</span> Live API Console
+                                    </span>
+                                    <button onclick="runHealthTest()" id="btn-test-health" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">send</span> Execute GET
+                                    </button>
+                                </div>
+                                <div id="res-health-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-health-status" class="font-bold"></span>
+                                        <span id="res-health-time"></span>
+                                    </div>
+                                    <pre id="res-health-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -207,39 +282,67 @@
 
             <!-- SECTION: LIST PROJECTS -->
             <section id="get-projects" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <div class="lg:col-span-6 space-y-4">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
                         <div class="flex items-center gap-3">
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">GET</span>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">GET</span>
                             <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/projects</code>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-900 dark:text-white">List All Projects</h3>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">List Workspace Projects</h2>
                         <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Retrieves all projects owned by the authenticated user. If no projects exist, standard default workspace projects are returned.
+                            Retrieves all projects owned by the authenticated user in reverse chronological order.
                         </p>
                         <div class="space-y-2 pt-2">
-                            <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider">Response Fields</h4>
+                            <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider">Response Fields</h4>
                             <div class="text-xs text-slate-600 dark:text-slate-400 space-y-1 font-mono">
-                                <p><strong class="text-slate-800 dark:text-slate-200">id</strong> (string): Unique project identifier (e.g. <code>proj_123</code>)</p>
-                                <p><strong class="text-slate-800 dark:text-slate-200">title</strong> (string): Project display name</p>
-                                <p><strong class="text-slate-800 dark:text-slate-200">description</strong> (string): Optional project summary</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">projects</strong> (array): List of project objects</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">id</strong> (string): Unique ID (e.g. <code>prj_demo123456</code>)</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">title</strong> (string): Project name</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="lg:col-span-6">
+                    <div class="xl:col-span-6 space-y-3">
                         <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span>JavaScript / Python / cURL</span>
-                                <span class="text-emerald-400 text-[11px] font-mono">200 OK</span>
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <div class="flex gap-4">
+                                    <button onclick="switchTab('get-proj', 'curl')" id="get-proj-tab-curl" class="code-tab-btn active text-slate-300 pb-0.5">cURL</button>
+                                    <button onclick="switchTab('get-proj', 'python')" id="get-proj-tab-python" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">Python</button>
+                                    <button onclick="switchTab('get-proj', 'js')" id="get-proj-tab-js" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">JavaScript</button>
+                                </div>
+                                <button onclick="copyCurrentSnippet('get-proj')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
                             </div>
                             <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre>// Python Example
-import requests
-
-headers = {"Authorization": "Bearer YOUR_TOKEN"}
-response = requests.get("https://your-domain/api/v1/projects", headers=headers)
-print(response.json())</pre>
+                                <pre id="get-proj-code-curl">curl -X GET "http://localhost:3000/api/v1/projects" \
+  -H "Authorization: Bearer demo-token"</pre>
+                                <pre id="get-proj-code-python" class="hidden">import requests
+headers = {"Authorization": "Bearer demo-token"}
+res = requests.get("http://localhost:3000/api/v1/projects", headers=headers)
+print(res.json())</pre>
+                                <pre id="get-proj-code-js" class="hidden">fetch('/api/v1/projects', {
+  headers: { 'Authorization': 'Bearer demo-token' }
+}).then(r => r.json()).then(console.log);</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable Test Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">play_arrow</span> Test API Request
+                                    </span>
+                                    <button onclick="runGetProjectsTest()" id="btn-test-get-proj" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">send</span> Execute GET
+                                    </button>
+                                </div>
+                                <div id="res-get-proj-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-get-proj-status" class="font-bold"></span>
+                                        <span id="res-get-proj-time"></span>
+                                    </div>
+                                    <pre id="res-get-proj-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -250,47 +353,78 @@ print(response.json())</pre>
 
             <!-- SECTION: CREATE PROJECT -->
             <section id="create-project" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <div class="lg:col-span-6 space-y-4">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
                         <div class="flex items-center gap-3">
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">POST</span>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20">POST</span>
                             <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/projects</code>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-900 dark:text-white">Create Project</h3>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Create New Project</h2>
                         <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Creates a new workspace project to group notes and documents.
+                            Creates a new workspace project container for grouping notes.
                         </p>
                         <div class="space-y-2 pt-2">
-                            <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider">Request Body Parameters</h4>
+                            <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider">JSON Body Parameters</h4>
                             <div class="text-xs text-slate-600 dark:text-slate-400 space-y-1 font-mono">
-                                <p><strong class="text-slate-800 dark:text-slate-200">title</strong> (string, required): Project title</p>
-                                <p><strong class="text-slate-800 dark:text-slate-200">description</strong> (string): Optional summary</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">title</strong> (string, required): Project display name</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">description</strong> (string, optional): Project notes or description</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="lg:col-span-6">
+                    <div class="xl:col-span-6 space-y-3">
                         <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span>Request Body & Response</span>
-                                <span class="text-emerald-400 text-[11px] font-mono">201 Created</span>
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <div class="flex gap-4">
+                                    <button onclick="switchTab('post-proj', 'curl')" id="post-proj-tab-curl" class="code-tab-btn active text-slate-300 pb-0.5">cURL</button>
+                                    <button onclick="switchTab('post-proj', 'python')" id="post-proj-tab-python" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">Python</button>
+                                    <button onclick="switchTab('post-proj', 'js')" id="post-proj-tab-js" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">JavaScript</button>
+                                </div>
+                                <button onclick="copyCurrentSnippet('post-proj')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
                             </div>
                             <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre>// cURL Request
-curl -X POST https://your-domain/api/v1/projects \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+                                <pre id="post-proj-code-curl">curl -X POST "http://localhost:3000/api/v1/projects" \
+  -H "Authorization: Bearer demo-token" \
   -H "Content-Type: application/json" \
-  -d '{"title": "Machine Learning Notes", "description": "AI research"}'
-
-// Response
-{
-  "project": {
-    "id": "proj_a8f12d",
-    "title": "Machine Learning Notes",
-    "description": "AI research",
-    "created_at": "2026-07-22T08:00:00Z"
-  }
-}</pre>
+  -d '{"title": "AI & Quantum Research", "description": "Notes on transformers and qbits"}'</pre>
+                                <pre id="post-proj-code-python" class="hidden">import requests
+payload = {"title": "AI Research", "description": "Deep learning ideas"}
+headers = {"Authorization": "Bearer demo-token", "Content-Type": "application/json"}
+res = requests.post("http://localhost:3000/api/v1/projects", json=payload, headers=headers)
+print(res.json())</pre>
+                                <pre id="post-proj-code-js" class="hidden">fetch('/api/v1/projects', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer demo-token', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ title: 'AI Research', description: 'Deep learning ideas' })
+}).then(r => r.json()).then(console.log);</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable POST Test Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">play_arrow</span> Live POST Tester
+                                    </span>
+                                    <button onclick="runPostProjectTest()" id="btn-test-post-proj" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">send</span> Execute POST
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-slate-400 mb-1">Payload JSON:</label>
+                                    <textarea id="post-proj-input-body" rows="2" class="w-full bg-[#0a0a0c] border border-border-dark rounded-lg p-2.5 font-mono text-xs text-slate-200 focus:border-primary focus:outline-none">{
+  "title": "New Workspace Project",
+  "description": "Created from Vex Live API Documentation"
+}</textarea>
+                                </div>
+                                <div id="res-post-proj-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-post-proj-status" class="font-bold"></span>
+                                        <span id="res-post-proj-time"></span>
+                                    </div>
+                                    <pre id="res-post-proj-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -299,83 +433,156 @@ curl -X POST https://your-domain/api/v1/projects \
 
             <hr class="border-border-light dark:border-border-dark">
 
-            <!-- SECTION: LIST FILES IN PROJECT -->
-            <section id="get-files" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <div class="lg:col-span-6 space-y-4">
+            <!-- SECTION: LIST / SEARCH NOTES -->
+            <section id="get-notes" class="scroll-mt-24">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
                         <div class="flex items-center gap-3">
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">GET</span>
-                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/projects/{project_id}/files</code>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">GET</span>
+                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/notes</code>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-900 dark:text-white">List Files in Project</h3>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">List & Search Notes</h2>
                         <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Retrieves all note files belonging to a specific project ID.
-                        </p>
-                    </div>
-
-                    <div class="lg:col-span-6">
-                        <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span>JavaScript Fetch</span>
-                                <span class="text-emerald-400 text-[11px] font-mono">200 OK</span>
-                            </div>
-                            <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre>const res = await fetch('/api/v1/projects/proj_default/files', {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-const data = await res.json();
-console.log(data.files);</pre>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <hr class="border-border-light dark:border-border-dark">
-
-            <!-- SECTION: CREATE FILE -->
-            <section id="create-file" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <div class="lg:col-span-6 space-y-4">
-                        <div class="flex items-center gap-3">
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">POST</span>
-                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/projects/{project_id}/files</code>
-                        </div>
-                        <h3 class="text-xl font-bold text-slate-900 dark:text-white">Create Note / File</h3>
-                        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Adds a new note or document file to a specific project.
+                            Retrieves all user notes across projects, with optional full-text search filtering or project ID scoping.
                         </p>
                         <div class="space-y-2 pt-2">
-                            <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider">Request Parameters</h4>
+                            <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider">URL Query Parameters</h4>
+                            <div class="text-xs text-slate-600 dark:text-slate-400 space-y-1 font-mono">
+                                <p><strong class="text-slate-800 dark:text-slate-200">q</strong> (string, optional): Search keyword for title, content, or folder</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">project_id</strong> (string, optional): Filter notes belonging to a specific project</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="xl:col-span-6 space-y-3">
+                        <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <div class="flex gap-4">
+                                    <button onclick="switchTab('get-notes', 'curl')" id="get-notes-tab-curl" class="code-tab-btn active text-slate-300 pb-0.5">cURL</button>
+                                    <button onclick="switchTab('get-notes', 'python')" id="get-notes-tab-python" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">Python</button>
+                                    <button onclick="switchTab('get-notes', 'js')" id="get-notes-tab-js" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">JavaScript</button>
+                                </div>
+                                <button onclick="copyCurrentSnippet('get-notes')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
+                            </div>
+                            <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
+                                <pre id="get-notes-code-curl">curl -X GET "http://localhost:3000/api/v1/notes?q=welcome" \
+  -H "Authorization: Bearer demo-token"</pre>
+                                <pre id="get-notes-code-python" class="hidden">import requests
+res = requests.get("http://localhost:3000/api/v1/notes", headers={"Authorization": "Bearer demo-token"})
+print(res.json())</pre>
+                                <pre id="get-notes-code-js" class="hidden">fetch('/api/v1/notes', {
+  headers: { 'Authorization': 'Bearer demo-token' }
+}).then(r => r.json()).then(console.log);</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable GET Test Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">play_arrow</span> Live GET Tester
+                                    </span>
+                                    <button onclick="runGetNotesTest()" id="btn-test-get-notes" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">send</span> Execute GET
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-slate-400 mb-1">Search Query (optional):</label>
+                                    <input type="text" id="get-notes-search-q" placeholder="Search keyword e.g. 'Vex' or leave blank" class="w-full bg-[#0a0a0c] border border-border-dark rounded-lg p-2 font-mono text-xs text-slate-200 focus:border-primary focus:outline-none">
+                                </div>
+                                <div id="res-get-notes-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-get-notes-status" class="font-bold"></span>
+                                        <span id="res-get-notes-time"></span>
+                                    </div>
+                                    <pre id="res-get-notes-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <hr class="border-border-light dark:border-border-dark">
+
+            <!-- SECTION: CREATE NOTE -->
+            <section id="create-note" class="scroll-mt-24">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
+                        <div class="flex items-center gap-3">
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20">POST</span>
+                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/notes</code>
+                        </div>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Create Note / Document</h2>
+                        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                            Creates a new note with optional Markdown content, folder structure, and project assignment.
+                        </p>
+                        <div class="space-y-2 pt-2">
+                            <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider">JSON Request Parameters</h4>
                             <div class="text-xs text-slate-600 dark:text-slate-400 space-y-1 font-mono">
                                 <p><strong class="text-slate-800 dark:text-slate-200">title</strong> (string, required): Note title</p>
-                                <p><strong class="text-slate-800 dark:text-slate-200">content</strong> (string): Note content body</p>
-                                <p><strong class="text-slate-800 dark:text-slate-200">folder</strong> (string): Folder name (e.g. "General")</p>
-                                <p><strong class="text-slate-800 dark:text-slate-200">extension</strong> (string): File extension ("md", "txt")</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">content</strong> (string, optional): Markdown or plain text body</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">folder</strong> (string, default "General"): Folder path</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">project_id</strong> (string, optional): Associated project ID</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="lg:col-span-6">
+                    <div class="xl:col-span-6 space-y-3">
                         <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span>Python Request</span>
-                                <span class="text-emerald-400 text-[11px] font-mono">201 Created</span>
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <div class="flex gap-4">
+                                    <button onclick="switchTab('create-note', 'curl')" id="create-note-tab-curl" class="code-tab-btn active text-slate-300 pb-0.5">cURL</button>
+                                    <button onclick="switchTab('create-note', 'python')" id="create-note-tab-python" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">Python</button>
+                                    <button onclick="switchTab('create-note', 'js')" id="create-note-tab-js" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">JavaScript</button>
+                                </div>
+                                <button onclick="copyCurrentSnippet('create-note')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
                             </div>
                             <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre>import requests
-
-payload = {
-    "title": "Quantum Computing",
-    "content": "Qubits and superposition...",
-    "folder": "Physics"
-}
-res = requests.post(
-    "https://your-domain/api/v1/projects/proj_default/files",
-    headers={"Authorization": f"Bearer {TOKEN}"},
-    json=payload
-)
+                                <pre id="create-note-code-curl">curl -X POST "http://localhost:3000/api/v1/notes" \
+  -H "Authorization: Bearer demo-token" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Neural Networks 101", "content": "Backpropagation formulas...", "folder": "AI"}'</pre>
+                                <pre id="create-note-code-python" class="hidden">import requests
+payload = {"title": "Neural Networks 101", "content": "Backpropagation formulas...", "folder": "AI"}
+headers = {"Authorization": "Bearer demo-token", "Content-Type": "application/json"}
+res = requests.post("http://localhost:3000/api/v1/notes", json=payload, headers=headers)
 print(res.json())</pre>
+                                <pre id="create-note-code-js" class="hidden">fetch('/api/v1/notes', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer demo-token', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ title: 'Neural Networks 101', content: 'Backpropagation formulas...', folder: 'AI' })
+}).then(r => r.json()).then(console.log);</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable POST Note Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">play_arrow</span> Live POST Note Console
+                                    </span>
+                                    <button onclick="runPostNoteTest()" id="btn-test-post-note" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">send</span> Execute POST
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-slate-400 mb-1">Payload JSON:</label>
+                                    <textarea id="post-note-input-body" rows="3" class="w-full bg-[#0a0a0c] border border-border-dark rounded-lg p-2.5 font-mono text-xs text-slate-200 focus:border-primary focus:outline-none">{
+  "title": "Quantum Supremacy Research",
+  "content": "# Quantum Computing\n\nSchrödinger equation: $i\\hbar\\frac{\\partial}{\\partial t}\\Psi = \\hat{H}\\Psi$",
+  "folder": "Physics"
+}</textarea>
+                                </div>
+                                <div id="res-post-note-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-post-note-status" class="font-bold"></span>
+                                        <span id="res-post-note-time"></span>
+                                    </div>
+                                    <pre id="res-post-note-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -384,29 +591,75 @@ print(res.json())</pre>
 
             <hr class="border-border-light dark:border-border-dark">
 
-            <!-- SECTION: DUPLICATE FILE -->
-            <section id="copy-file" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <div class="lg:col-span-6 space-y-4">
+            <!-- SECTION: GEMINI AI CHAT -->
+            <section id="ai-chat" class="scroll-mt-24">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
                         <div class="flex items-center gap-3">
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">POST</span>
-                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/projects/{project_id}/files/{file_id}/copy</code>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">POST</span>
+                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/ai/chat</code>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-900 dark:text-white">Duplicate File / Note</h3>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Vex Gemini AI Assistant</h2>
                         <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Duplicates an existing file note inside the specified project.
+                            Queries the Gemini 2.5 Flash model with optional note context to synthesize ideas, summarize thoughts, write equations, or answer queries.
                         </p>
+                        <div class="space-y-2 pt-2">
+                            <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider">JSON Request Parameters</h4>
+                            <div class="text-xs text-slate-600 dark:text-slate-400 space-y-1 font-mono">
+                                <p><strong class="text-slate-800 dark:text-slate-200">message</strong> (string, required): User question or prompt</p>
+                                <p><strong class="text-slate-800 dark:text-slate-200">context</strong> (string, optional): Relevant note text to ground AI response</p>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="lg:col-span-6">
+                    <div class="xl:col-span-6 space-y-3">
                         <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span>cURL Copy</span>
-                                <span class="text-emerald-400 text-[11px] font-mono">201 Created</span>
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <div class="flex gap-4">
+                                    <button onclick="switchTab('ai-chat', 'curl')" id="ai-chat-tab-curl" class="code-tab-btn active text-slate-300 pb-0.5">cURL</button>
+                                    <button onclick="switchTab('ai-chat', 'python')" id="ai-chat-tab-python" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">Python</button>
+                                    <button onclick="switchTab('ai-chat', 'js')" id="ai-chat-tab-js" class="code-tab-btn text-slate-400 hover:text-slate-200 pb-0.5">JavaScript</button>
+                                </div>
+                                <button onclick="copyCurrentSnippet('ai-chat')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
                             </div>
                             <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre>curl -X POST https://your-domain/api/v1/projects/proj_default/files/nt_12345/copy \
-  -H "Authorization: Bearer YOUR_TOKEN"</pre>
+                                <pre id="ai-chat-code-curl">curl -X POST "http://localhost:3000/api/v1/ai/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Summarize the key principles of quantum mechanics."}'</pre>
+                                <pre id="ai-chat-code-python" class="hidden">import requests
+payload = {"message": "Summarize key principles of quantum mechanics"}
+res = requests.post("http://localhost:3000/api/v1/ai/chat", json=payload)
+print(res.json())</pre>
+                                <pre id="ai-chat-code-js" class="hidden">fetch('/api/v1/ai/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ message: 'Summarize key principles of quantum mechanics' })
+}).then(r => r.json()).then(console.log);</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable AI Chat Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">auto_awesome</span> Live Gemini AI Tester
+                                    </span>
+                                    <button onclick="runAiChatTest()" id="btn-test-ai-chat" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">send</span> Send Prompt
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-mono text-slate-400 mb-1">Prompt Message:</label>
+                                    <input type="text" id="ai-chat-input-msg" value="Explain neural network backpropagation in 2 bullet points." class="w-full bg-[#0a0a0c] border border-border-dark rounded-lg p-2 font-mono text-xs text-slate-200 focus:border-primary focus:outline-none">
+                                </div>
+                                <div id="res-ai-chat-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-ai-chat-status" class="font-bold"></span>
+                                        <span id="res-ai-chat-time"></span>
+                                    </div>
+                                    <pre id="res-ai-chat-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48 whitespace-pre-wrap"></pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -415,38 +668,115 @@ print(res.json())</pre>
 
             <hr class="border-border-light dark:border-border-dark">
 
-            <!-- SECTION: DEVELOPER KEYS -->
-            <section id="developer-keys" class="scroll-mt-24">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    <div class="lg:col-span-6 space-y-4">
+            <!-- SECTION: DEVELOPER KEYS API -->
+            <section id="get-keys" class="scroll-mt-24">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
                         <div class="flex items-center gap-3">
-                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">KEYS API</span>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">GET</span>
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20">POST</span>
                             <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/developer/keys</code>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-900 dark:text-white">Programmatic API Key Management</h3>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Developer API Key Management</h2>
                         <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                            Generate long-lived JWT API tokens or list active developer credentials programmatically.
+                            Programmatically issue or list long-lived <code class="text-primary font-mono">vex_live_...</code> API keys for external workers, SDK integrations, or CI/CD tasks.
                         </p>
                     </div>
 
-                    <div class="lg:col-span-6">
+                    <div class="xl:col-span-6 space-y-3">
                         <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs text-slate-400">
-                                <span>POST /api/v1/developer/keys</span>
-                                <span class="text-emerald-400 text-[11px] font-mono">201 Created</span>
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <span class="text-slate-300 font-bold">API Keys Management</span>
+                                <button onclick="copySnippet('keys-code-curl')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
                             </div>
                             <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
-<pre>// Request
-POST /api/v1/developer/keys
-{"name": "CI Build Worker"}
+                                <pre id="keys-code-curl"># List Keys
+curl -X GET "http://localhost:3000/api/v1/developer/keys" -H "Authorization: Bearer demo-token"
 
-// Response
-{
-  "key_id": "key_a91b2c",
-  "name": "CI Build Worker",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "message": "Please copy this token now."
-}</pre>
+# Generate New Key
+curl -X POST "http://localhost:3000/api/v1/developer/keys" \
+  -H "Authorization: Bearer demo-token" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Production Server Worker"}'</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable Keys Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">vpn_key</span> Live Keys Console
+                                    </span>
+                                    <div class="flex gap-2">
+                                        <button onclick="runGetKeysTest()" class="bg-surface-light dark:bg-[#27272a] hover:bg-border-light dark:hover:bg-slate-700 text-slate-200 font-semibold px-3 py-1 rounded-lg text-xs transition-all">
+                                            GET Keys
+                                        </button>
+                                        <button onclick="runPostKeyTest()" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1 rounded-lg text-xs transition-all flex items-center gap-1">
+                                            <span class="material-icons text-xs">add</span> Create Key
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="res-keys-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-keys-status" class="font-bold"></span>
+                                        <span id="res-keys-time"></span>
+                                    </div>
+                                    <pre id="res-keys-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <hr class="border-border-light dark:border-border-dark">
+
+            <!-- SECTION: GLOBAL SEARCH API -->
+            <section id="global-search" class="scroll-mt-24">
+                <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                    <div class="xl:col-span-6 space-y-4">
+                        <div class="flex items-center gap-3">
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">GET</span>
+                            <code class="text-sm font-semibold text-slate-900 dark:text-slate-200">/api/v1/search</code>
+                        </div>
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white">Global Workspace Search</h2>
+                        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                            Executes a combined search across all project titles, project descriptions, and note content.
+                        </p>
+                    </div>
+
+                    <div class="xl:col-span-6 space-y-3">
+                        <div class="bg-[#111113] border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
+                            <div class="flex items-center justify-between px-4 py-2.5 bg-[#18181b] border-b border-border-dark text-xs font-mono">
+                                <span class="text-slate-300 font-bold">Search Endpoint</span>
+                                <button onclick="copySnippet('search-code-curl')" class="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-[11px]">
+                                    <span class="material-icons text-xs">content_copy</span> Copy
+                                </button>
+                            </div>
+                            <div class="p-4 text-xs font-mono text-slate-200 overflow-x-auto custom-scrollbar">
+                                <pre id="search-code-curl">curl -X GET "http://localhost:3000/api/v1/search?q=quantum" \
+  -H "Authorization: Bearer demo-token"</pre>
+                            </div>
+                            
+                            <!-- Realtime Executable Search Console -->
+                            <div class="border-t border-border-dark bg-[#161619] p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-1.5">
+                                        <span class="material-icons text-sm">search</span> Live Search Tester
+                                    </span>
+                                    <button onclick="runSearchTest()" class="bg-primary hover:bg-primary-hover text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1">
+                                        <span class="material-icons text-xs">search</span> Search
+                                    </button>
+                                </div>
+                                <input type="text" id="search-input-q" value="quantum" placeholder="Search keyword..." class="w-full bg-[#0a0a0c] border border-border-dark rounded-lg p-2 font-mono text-xs text-slate-200 focus:border-primary focus:outline-none">
+                                <div id="res-search-box" class="hidden rounded-xl bg-[#0a0a0c] border border-border-dark p-3 font-mono text-xs">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-b border-border-dark pb-2 mb-2">
+                                        <span id="res-search-status" class="font-bold"></span>
+                                        <span id="res-search-time"></span>
+                                    </div>
+                                    <pre id="res-search-body" class="text-slate-200 overflow-x-auto custom-scrollbar text-[11px] max-h-48"></pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -482,7 +812,7 @@ POST /api/v1/developer/keys
         });
     }
 
-    // Firebase Auth setup for Interactive Token Copy
+    // Firebase Auth Integration
     const firebaseConfig = {{ firebase_json | safe if firebase_json else '{}' }};
     let auth = null;
 
@@ -490,39 +820,170 @@ POST /api/v1/developer/keys
         try {
             if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
             auth = firebase.auth();
+            
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    try {
+                        const token = await user.getIdToken();
+                        document.getElementById('global-auth-token').value = token;
+                    } catch(e){}
+                }
+            });
         } catch(e) {}
     }
 
-    async function copyMyLiveToken() {
-        const btn = document.getElementById('copy-my-token-btn');
-        const statusMsg = document.getElementById('auth-status-msg');
-
-        if (!auth || !auth.currentUser) {
-            statusMsg.innerText = 'Not logged in. Please log in via Dashboard first to generate a live token.';
-            statusMsg.className = 'text-[11px] font-mono text-amber-500 pt-1';
-            return;
+    async function autoFillMyToken() {
+        if (auth && auth.currentUser) {
+            try {
+                const token = await auth.currentUser.getIdToken(true);
+                document.getElementById('global-auth-token').value = token;
+                alert('Session Bearer Token automatically inserted into Header token box!');
+            } catch(e) {
+                alert('Error fetching user token: ' + e.message);
+            }
+        } else {
+            alert('No active Firebase session found. Using demo-token as fallback.');
+            document.getElementById('global-auth-token').value = 'demo-token';
         }
+    }
 
-        try {
-            const token = await auth.currentUser.getIdToken(true);
-            await navigator.clipboard.writeText(token);
-            btn.innerHTML = `<span class="material-icons text-sm">check</span> Token Copied!`;
-            statusMsg.innerText = 'Token copied to clipboard! Token valid for 1 hour.';
-            statusMsg.className = 'text-[11px] font-mono text-emerald-400 pt-1';
+    // Tab Switching Helper
+    function switchTab(section, lang) {
+        ['curl', 'python', 'js'].forEach(l => {
+            const btn = document.getElementById(`${section}-tab-${l}`);
+            const code = document.getElementById(`${section}-code-${l}`);
+            if (btn) btn.classList.remove('active', 'text-slate-300');
+            if (btn) btn.classList.add('text-slate-400');
+            if (code) code.classList.add('hidden');
+        });
 
-            setTimeout(() => {
-                btn.innerHTML = `<span class="material-icons text-sm">content_copy</span> Copy My Live Bearer Token`;
-            }, 3000);
-        } catch (err) {
-            statusMsg.innerText = 'Error fetching token: ' + (err.message || err);
-            statusMsg.className = 'text-[11px] font-mono text-red-400 pt-1';
-        }
+        const activeBtn = document.getElementById(`${section}-tab-${lang}`);
+        const activeCode = document.getElementById(`${section}-code-${lang}`);
+        if (activeBtn) activeBtn.classList.add('active', 'text-slate-300');
+        if (activeCode) activeCode.classList.remove('hidden');
     }
 
     function copySnippet(elementId) {
         const el = document.getElementById(elementId);
         if (!el) return;
         navigator.clipboard.writeText(el.innerText);
+        alert('Snippet copied to clipboard!');
+    }
+
+    function copyCurrentSnippet(section) {
+        const activeCode = document.querySelector(`[id^="${section}-code-"]:not(.hidden)`);
+        if (activeCode) {
+            navigator.clipboard.writeText(activeCode.innerText);
+            alert('Snippet copied to clipboard!');
+        }
+    }
+
+    // ==========================================
+    // REALTIME API TESTER RUNNER
+    // ==========================================
+    function getAuthTokenHeader() {
+        const val = (document.getElementById('global-auth-token').value || 'demo-token').trim();
+        if (val.startsWith('vex_live_')) return { 'X-API-Key': val, 'Authorization': `Bearer ${val}` };
+        return { 'Authorization': `Bearer ${val}` };
+    }
+
+    async function executeApiCall(method, url, bodyObj, resBoxId, resStatusId, resTimeId, resBodyId) {
+        const box = document.getElementById(resBoxId);
+        const statusEl = document.getElementById(resStatusId);
+        const timeEl = document.getElementById(resTimeId);
+        const bodyEl = document.getElementById(resBodyId);
+
+        box.classList.remove('hidden');
+        statusEl.innerText = 'Sending...';
+        statusEl.className = 'font-bold text-amber-400';
+        timeEl.innerText = '';
+        bodyEl.innerText = 'Executing request...';
+
+        const startTime = performance.now();
+        try {
+            const headers = getAuthTokenHeader();
+            if (bodyObj) headers['Content-Type'] = 'application/json';
+
+            const opts = { method, headers };
+            if (bodyObj) opts.body = JSON.stringify(bodyObj);
+
+            const res = await fetch(url, opts);
+            const endTime = performance.now();
+            const durationMs = Math.round(endTime - startTime);
+
+            const statusText = `${res.status} ${res.statusText || ''}`;
+            statusEl.innerText = statusText;
+            timeEl.innerText = `${durationMs} ms`;
+
+            if (res.ok) {
+                statusEl.className = 'font-bold text-emerald-400';
+            } else {
+                statusEl.className = 'font-bold text-rose-400';
+            }
+
+            const data = await res.json();
+            bodyEl.innerText = JSON.stringify(data, null, 2);
+        } catch (err) {
+            statusEl.innerText = 'Error';
+            statusEl.className = 'font-bold text-rose-400';
+            bodyEl.innerText = err.toString();
+        }
+    }
+
+    // Specific Endpoint Testers
+    function runHealthTest() {
+        executeApiCall('GET', '/api/health', null, 'res-health-box', 'res-health-status', 'res-health-time', 'res-health-body');
+    }
+
+    function runGetProjectsTest() {
+        executeApiCall('GET', '/api/v1/projects', null, 'res-get-proj-box', 'res-get-proj-status', 'res-get-proj-time', 'res-get-proj-body');
+    }
+
+    function runPostProjectTest() {
+        try {
+            const raw = document.getElementById('post-proj-input-body').value;
+            const body = JSON.parse(raw);
+            executeApiCall('POST', '/api/v1/projects', body, 'res-post-proj-box', 'res-post-proj-status', 'res-post-proj-time', 'res-post-proj-body');
+        } catch(e) {
+            alert('Invalid JSON payload: ' + e.message);
+        }
+    }
+
+    function runGetNotesTest() {
+        const q = (document.getElementById('get-notes-search-q').value || '').trim();
+        const url = q ? `/api/v1/notes?q=${encodeURIComponent(q)}` : '/api/v1/notes';
+        executeApiCall('GET', url, null, 'res-get-notes-box', 'res-get-notes-status', 'res-get-notes-time', 'res-get-notes-body');
+    }
+
+    function runPostNoteTest() {
+        try {
+            const raw = document.getElementById('post-note-input-body').value;
+            const body = JSON.parse(raw);
+            executeApiCall('POST', '/api/v1/notes', body, 'res-post-note-box', 'res-post-note-status', 'res-post-note-time', 'res-post-note-body');
+        } catch(e) {
+            alert('Invalid JSON payload: ' + e.message);
+        }
+    }
+
+    function runAiChatTest() {
+        const msg = (document.getElementById('ai-chat-input-msg').value || '').trim();
+        if (!msg) { alert('Please enter a prompt message.'); return; }
+        executeApiCall('POST', '/api/v1/ai/chat', { message: msg }, 'res-ai-chat-box', 'res-ai-chat-status', 'res-ai-chat-time', 'res-ai-chat-body');
+    }
+
+    function runGetKeysTest() {
+        executeApiCall('GET', '/api/v1/developer/keys', null, 'res-keys-box', 'res-keys-status', 'res-keys-time', 'res-keys-body');
+    }
+
+    function runPostKeyTest() {
+        const name = prompt('Enter a name for the new developer API Key:', 'Live Doc Test Key');
+        if (!name) return;
+        executeApiCall('POST', '/api/v1/developer/keys', { name }, 'res-keys-box', 'res-keys-status', 'res-keys-time', 'res-keys-body');
+    }
+
+    function runSearchTest() {
+        const q = (document.getElementById('search-input-q').value || '').trim();
+        executeApiCall('GET', `/api/v1/search?q=${encodeURIComponent(q)}`, null, 'res-search-box', 'res-search-status', 'res-search-time', 'res-search-body');
     }
 </script>
 </body>
