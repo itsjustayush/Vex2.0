@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html class="dark">
+<head>
+    <meta charset="utf-8">
+    <title>Signing you in…</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>body{background:#131316;color:#e4e1e6;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}</style>
+</head>
+<body>
+    <div style="text-align: center;">
+        <h2 style="color: #63dac3; margin-bottom: 10px;">Authenticating...</h2>
+        <p style="font-size: 14px; color: #8a8a94;">Securely connecting you to Vex Workspace.</p>
+    </div>
+<script>
+    const SUPABASE_URL = '{{ supabase_url }}';
+    const SUPABASE_ANON_KEY = '{{ supabase_anon_key }}';
+
+    (async () => {
+        if (!SUPABASE_URL) { location.href='/login'; return; }
+        const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Supabase parses URL fragment automatically on page load
+        await new Promise(r => setTimeout(r, 600));
+        const { data: { session } } = await supa.auth.getSession();
+        location.href = session ? '/dashboard' : '/login';
+    })();
+</script>
+</body>
+</html>

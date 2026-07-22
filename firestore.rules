@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check auth
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check ownership
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Projects collection
+    match /projects/{projectId} {
+      allow read, write: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+    }
+
+    // Files / Notes collection
+    match /files/{fileId} {
+      allow read: if resource.data.is_public == true || (isAuthenticated() && resource.data.user_id == request.auth.uid);
+      allow create, update, delete: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+    }
+
+    // Developer API Keys collection
+    match /api_keys/{keyId} {
+      allow read, write: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+    }
+  }
+}

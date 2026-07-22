@@ -1,0 +1,33 @@
+{
+  "entities": {
+    "projects": {
+      "title": "Projects",
+      "description": "User note projects/workspaces",
+      "properties": {
+        "id": { "type": "string", "description": "Project ID" },
+        "user_id": { "type": "string", "description": "Owner user ID" },
+        "title": { "type": "string", "description": "Project title" },
+        "description": { "type": "string", "description": "Project description" },
+        "created_at": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "user_id", "title"]
+    },
+    "files": {
+      "title": "Files",
+      "description": "User notes inside projects",
+      "properties": {
+        "id": { "type": "string", "description": "Note file ID" },
+        "user_id": { "type": "string", "description": "Owner user ID" },
+        "project_id": { "type": "string", "description": "Associated project ID" },
+        "title": { "type": "string", "description": "Note title" },
+        "content": { "type": "string", "description": "Note markdown content" },
+        "folder": { "type": "string", "description": "Folder tag" },
+        "extension": { "type": "string", "description": "File extension e.g. md" },
+        "is_public": { "type": "boolean", "description": "Public share flag" },
+        "created_at": { "type": "string", "description": "Creation timestamp" },
+        "updated_at": { "type": "string", "description": "Last update timestamp" }
+      },
+      "required": ["id", "user_id", "project_id", "title"]
+    }
+  }
+}

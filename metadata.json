@@ -1,0 +1,8 @@
+{
+  "name": "Vex - Networked Thought & AI Workspace",
+  "description": "Vex is a modern networked thought platform with AI-assisted note taking, markdown/LaTeX editing, and project management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

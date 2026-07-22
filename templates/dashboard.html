@@ -1,0 +1,1886 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vex Workspace | Dashboard</title>
+
+    <!-- Google Fonts & Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "background": "#131316",
+                        "surface-low": "#1b1b1e",
+                        "surface-high": "#2a2a2d",
+                        "primary": "#63dac3",
+                        "primary-hover": "#42cbb1",
+                        "on-surface": "#e4e1e6",
+                        "slate-border": "#27272A",
+                        "slate-text": "#8e8e93"
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                        mono: ["JetBrains Mono", "monospace"]
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- External Libraries: Marked (Markdown parser), KaTeX (Math rendering), html2pdf -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Firebase Web SDK (v10 compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-background text-on-surface h-full flex overflow-hidden font-sans antialiased">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Modal: New Project -->
+    <div id="modal-new-project" class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-lg font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">folder_open</span> Create New Project
+                </h3>
+                <button onclick="closeModal('modal-new-project')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Project Title</label>
+                    <input id="new-proj-title" type="text" placeholder="e.g., Quantum Computing Research" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-sm focus:outline-none focus:border-primary text-on-surface">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Description (Optional)</label>
+                    <textarea id="new-proj-desc" rows="3" placeholder="Brief scope or objectives..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-sm focus:outline-none focus:border-primary text-on-surface resize-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-new-project')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
+                <button onclick="createProjectSubmit()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-primary hover:bg-primary-hover text-background">Create Project</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Global Search -->
+    <div id="modal-global-search" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <div class="flex items-center gap-3 w-full pr-2">
+                    <span class="material-symbols-outlined text-primary text-xl">search</span>
+                    <input id="global-search-input" type="text" placeholder="Search projects & notes by title or content... (Ctrl + K)" class="w-full bg-transparent text-sm text-on-surface focus:outline-none" oninput="performGlobalSearch()">
+                </div>
+                <button onclick="closeModal('modal-global-search')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div id="global-search-results" class="max-h-80 overflow-y-auto space-y-2 pr-1">
+                <p class="text-xs text-slate-text text-center py-6">Type a keyword to search across all projects and notes...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Note Version History -->
+    <div id="modal-version-history" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-base">history</span> Note Version History
+                </h3>
+                <button onclick="closeModal('modal-version-history')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div id="version-history-list" class="max-h-80 overflow-y-auto space-y-3 pr-1">
+                <p class="text-xs text-slate-text text-center py-6">Loading version history...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: New Google Keep Note -->
+    <div id="modal-new-keep-note" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-surface-low border border-slate-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-border/60 pb-3">
+                <h3 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-amber-400 text-lg">lightbulb</span> Create Note in Google Keep
+                </h3>
+                <button onclick="closeModal('modal-new-keep-note')" class="text-slate-text hover:text-on-surface text-xl">&times;</button>
+            </div>
+            <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-300">
+                ⚠️ Notice: This action will create a new note directly inside your connected Google Keep account with your explicit permission.
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Note Title</label>
+                    <input id="new-keep-title" type="text" placeholder="e.g., Quick Task List" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-amber-400">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-text mb-1">Note Body / Content</label>
+                    <textarea id="new-keep-content" rows="4" placeholder="Write your thoughts or bullet items..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-amber-400 resize-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeModal('modal-new-keep-note')" class="px-4 py-2 rounded-xl text-xs font-medium bg-surface-high border border-slate-border text-slate-text hover:text-on-surface">Cancel</button>
+                <button onclick="confirmCreateKeepNote()" class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-background shadow transition-all">Confirm & Save to Keep</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- LEFT SIDEBAR (280px) -->
+    <!-- ========================================== -->
+    <aside class="w-64 md:w-70 bg-surface-low border-r border-slate-border flex flex-col justify-between flex-shrink-0 z-20">
+        <div class="p-4 space-y-6">
+            <!-- App Brand Header -->
+            <div class="flex items-center gap-3 px-2">
+                <div class="w-9 h-9 rounded-xl bg-primary/20 border border-primary/40 flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">bolt</span>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold text-on-surface leading-none flex items-center gap-1.5 flex-wrap">
+                        <span>Vex Workspace</span>
+                        <span class="text-slate-text/50 font-normal text-xs">•</span>
+                        <span class="text-primary font-mono text-xs font-medium"><span id="typewriter-text">Think Better</span><span class="animate-pulse text-primary font-mono font-bold">|</span></span>
+                    </h1>
+                    <span class="text-[10px] text-primary font-mono font-medium">v2.5 AI Powered</span>
+                </div>
+            </div>
+
+            <!-- New Project Button -->
+            <button onclick="openModal('modal-new-project')" class="w-full bg-primary hover:bg-primary-hover text-background font-semibold text-xs py-2.5 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-base">add</span>
+                <span>New Project</span>
+            </button>
+
+            <!-- Navigation Links -->
+            <nav class="space-y-1">
+                <button onclick="switchView('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-on-surface bg-surface-high border border-slate-border/50">
+                    <span class="material-symbols-outlined text-lg text-primary">dashboard</span>
+                    <span>Dashboard</span>
+                </button>
+                <button onclick="switchView('projects')" id="nav-projects" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg">folder</span>
+                    <span>Projects</span>
+                </button>
+                <button onclick="switchView('workspace')" id="nav-workspace" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg">edit_note</span>
+                    <span>Active Workspace</span>
+                </button>
+                <button onclick="switchView('keep')" id="nav-keep" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg text-amber-400">lightbulb</span>
+                    <span class="flex-1 text-left">Google Keep</span>
+                    <span class="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono">Sync</span>
+                </button>
+                <a href="/settings" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg">settings</span>
+                    <span>Settings</span>
+                </a>
+                <a href="/docs" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <span class="material-symbols-outlined text-lg">description</span>
+                    <span>Documentation</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- User Profile Footer -->
+        <div class="p-4 border-t border-slate-border/60 bg-surface-low/80">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div id="user-avatar" class="w-8 h-8 rounded-full bg-primary/20 text-primary border border-primary/30 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                        U
+                    </div>
+                    <div class="overflow-hidden text-left">
+                        <p id="user-display-name" class="text-xs font-semibold text-on-surface truncate">Guest User</p>
+                        <p id="user-email" class="text-[10px] text-slate-text truncate">guest@vex.local</p>
+                    </div>
+                </div>
+                <button onclick="logout()" title="Logout" class="text-slate-text hover:text-red-400 p-1.5 rounded-lg hover:bg-surface-high transition-colors">
+                    <span class="material-symbols-outlined text-lg">logout</span>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+
+    <!-- ========================================== -->
+    <!-- MAIN CONTENT CONTAINER -->
+    <!-- ========================================== -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-background">
+        
+        <!-- TOP HEADER BAR -->
+        <header class="h-14 border-b border-slate-border px-6 flex items-center justify-between bg-surface-low/50 backdrop-blur-md">
+            <div class="flex items-center gap-3">
+                <span id="current-view-title" class="text-sm font-semibold text-on-surface">Dashboard Overview</span>
+                <span id="demo-badge" class="hidden text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono">Guest Demo</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="openGlobalSearchModal()" title="Search Projects & Notes (Ctrl + K)" class="flex items-center gap-2 text-xs text-slate-text hover:text-on-surface bg-surface-high border border-slate-border px-3 py-1.5 rounded-xl transition-all hover:border-primary/50">
+                    <span class="material-symbols-outlined text-base text-primary">search</span>
+                    <span class="hidden sm:inline font-medium">Search...</span>
+                    <kbd class="hidden md:inline bg-surface-low text-[10px] text-slate-text px-1.5 py-0.5 rounded border border-slate-border font-mono">Ctrl+K</kbd>
+                </button>
+                <button onclick="toggleRightSidebar()" title="Toggle Calendar & AI Assistant" class="flex items-center gap-2 text-xs text-slate-text hover:text-on-surface bg-surface-high border border-slate-border px-3 py-1.5 rounded-xl transition-all">
+                    <span class="material-symbols-outlined text-base text-primary">auto_awesome</span>
+                    <span class="hidden sm:inline">AI & Calendar</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- VIEW 1: DASHBOARD OVERVIEW -->
+        <div id="view-dashboard" class="flex-1 overflow-y-auto p-6 space-y-6">
+            <!-- Hero Banner Section -->
+            <section class="bg-gradient-to-r from-surface-low via-surface-high/80 to-surface-low border border-slate-border rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <!-- Background ambient glow (div 1) -->
+                <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <!-- Main hero content container (div 2) -->
+                <div class="relative z-10 max-w-2xl space-y-2">
+                    <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-mono">
+                        <span class="material-symbols-outlined text-xs">auto_awesome</span>
+                        <span>Vex AI Workspace & Google Keep Sync</span>
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-on-surface tracking-tight flex items-center gap-2 flex-wrap">
+                        <span>Empowering You To</span>
+                        <span class="text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/20 inline-flex items-center">
+                            <span id="hero-typewriter-text">Think Better</span>
+                            <span class="animate-pulse text-primary font-bold ml-0.5">|</span>
+                        </span>
+                    </h1>
+                    <p class="text-xs sm:text-sm text-slate-text leading-relaxed">
+                        Seamlessly sync Google Keep notes, capture instant ideas, edit networked markdown with LaTeX support, and query Gemini 2.5 AI.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Metrics Bar -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-surface-low border border-slate-border rounded-2xl p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                        <span class="material-symbols-outlined">folder</span>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-text font-medium">Total Projects</p>
+                        <h4 id="stat-projects-count" class="text-xl font-bold text-on-surface">0</h4>
+                    </div>
+                </div>
+                <div class="bg-surface-low border border-slate-border rounded-2xl p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                        <span class="material-symbols-outlined">description</span>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-text font-medium">Notes & Ideas</p>
+                        <h4 id="stat-notes-count" class="text-xl font-bold text-on-surface">0</h4>
+                    </div>
+                </div>
+                <div class="bg-surface-low border border-slate-border rounded-2xl p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                        <span class="material-symbols-outlined">psychology</span>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-text font-medium">AI Intelligence</p>
+                        <h4 class="text-sm font-bold text-on-surface">Gemini 2.5</h4>
+                    </div>
+                </div>
+                <div class="bg-surface-low border border-slate-border rounded-2xl p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                        <span class="material-symbols-outlined">cloud_sync</span>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-text font-medium">Cloud Database</p>
+                        <h4 class="text-sm font-bold text-emerald-400">Synced</h4>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Note Capture Section -->
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary text-base">edit</span> Quick Thought Capture
+                    </h3>
+                    <select id="quick-note-project" class="bg-surface-high border border-slate-border rounded-xl px-3 py-1 text-xs text-on-surface focus:outline-none focus:border-primary">
+                        <option value="">Select Project...</option>
+                    </select>
+                </div>
+                <input id="quick-note-title" type="text" placeholder="Title or thought title..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-primary">
+                <textarea id="quick-note-content" rows="3" placeholder="Write markdown, ideas, or equation $E = mc^2$..." class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-xs text-on-surface focus:outline-none focus:border-primary resize-none"></textarea>
+                <div class="flex justify-end">
+                    <button onclick="saveQuickNote()" class="bg-primary hover:bg-primary-hover text-background font-semibold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">send</span>
+                        <span>Save Quick Note</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recent Projects Grid -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-on-surface">Recent Projects</h3>
+                    <button onclick="switchView('projects')" class="text-xs text-primary hover:underline">View All</button>
+                </div>
+                <div id="dashboard-projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Dynamic cards inserted via JS -->
+                </div>
+            </div>
+        </div>
+
+
+        <!-- VIEW 2: PROJECTS MANAGEMENT -->
+        <div id="view-projects" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-bold text-on-surface">Your Workspaces & Projects</h2>
+                    <p class="text-xs text-slate-text">Organize notes, code snippets, and mathematical research by project.</p>
+                </div>
+                <button onclick="openModal('modal-new-project')" class="bg-primary hover:bg-primary-hover text-background font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">add</span> New Project
+                </button>
+            </div>
+
+            <div id="projects-full-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Dynamic cards inserted via JS -->
+            </div>
+        </div>
+
+
+        <!-- VIEW: GOOGLE KEEP INTEGRATION -->
+        <div id="view-keep" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+            <!-- Header Banner -->
+            <div class="bg-surface-low border border-slate-border rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-2xl flex-shrink-0">
+                        <span class="material-symbols-outlined">lightbulb</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-bold text-on-surface">Google Keep Workspace</h2>
+                            <span id="keep-auth-badge" class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-mono">OAuth Ready</span>
+                        </div>
+                        <p class="text-xs text-slate-text mt-0.5">Manage, sync, and 1-click import/export notes directly with Google Keep.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="loginGoogleKeepOAuth()" class="px-3.5 py-2 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-xl text-xs font-semibold transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                        </svg>
+                        <span>Authorize Google Keep</span>
+                    </button>
+                    <button onclick="fetchGoogleKeepNotes()" class="px-3.5 py-2 bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-primary">sync</span>
+                        <span>Sync Keep Notes</span>
+                    </button>
+                    <button onclick="openModal('modal-new-keep-note')" class="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-background font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                        <span>New Keep Note</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Keep Search & Filter Bar -->
+            <div class="flex items-center justify-between gap-4">
+                <div class="flex-1 bg-surface-low border border-slate-border rounded-xl px-3 py-2 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-text text-sm">search</span>
+                    <input id="keep-search-input" type="text" placeholder="Search Google Keep notes..." class="bg-transparent text-xs text-on-surface focus:outline-none w-full" oninput="filterKeepNotes()">
+                </div>
+                <div class="text-xs text-slate-text font-mono" id="keep-notes-count">0 Keep Notes</div>
+            </div>
+
+            <!-- Keep Notes Grid -->
+            <div id="keep-notes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-xs text-slate-text text-center py-10 col-span-full">Click "Sync Keep Notes" to load your Google Keep notes...</p>
+            </div>
+        </div>
+
+
+        <!-- VIEW 3: ACTIVE WORKSPACE (SPLIT PANE EDITOR) -->
+        <div id="view-workspace" class="hidden flex-1 flex overflow-hidden">
+            
+            <!-- Notes File Browser (Left Pane 240px) -->
+            <div class="w-60 bg-surface-low border-r border-slate-border flex flex-col flex-shrink-0">
+                <div class="p-3 border-b border-slate-border/80 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-text uppercase tracking-wider">Project</span>
+                        <button onclick="createNewNoteInActiveProject()" title="New Note" class="text-primary hover:text-primary-hover p-1 rounded-lg hover:bg-surface-high">
+                            <span class="material-symbols-outlined text-base">add_box</span>
+                        </button>
+                    </div>
+                    <select id="workspace-project-select" onchange="onWorkspaceProjectChange()" class="w-full bg-surface-high border border-slate-border rounded-xl p-2 text-xs text-on-surface focus:outline-none focus:border-primary">
+                        <!-- Options loaded dynamically -->
+                    </select>
+                </div>
+
+                <!-- Notes List -->
+                <div id="notes-list-container" class="flex-1 overflow-y-auto p-2 space-y-1">
+                    <!-- Note items inserted dynamically -->
+                </div>
+            </div>
+
+            <!-- Rich Note Editor (Right Pane Flex-1) -->
+            <div class="flex-1 flex flex-col bg-background overflow-hidden relative">
+                
+                <!-- Editor Top Header & Controls -->
+                <div class="p-4 border-b border-slate-border/80 bg-surface-low/40 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex-1 flex items-center gap-3 min-w-[200px]">
+                        <input id="note-title-input" type="text" placeholder="Note Title..." class="bg-transparent border-b border-transparent hover:border-slate-border focus:border-primary text-base font-bold text-on-surface focus:outline-none px-1 py-0.5 w-full transition-all" oninput="triggerAutoSave()">
+                        <input id="note-folder-input" type="text" placeholder="Folder (e.g. General)" class="w-28 bg-surface-high border border-slate-border rounded-lg px-2 py-1 text-[11px] text-slate-text focus:outline-none focus:border-primary" oninput="triggerAutoSave()">
+                    </div>
+
+                    <!-- Actions Toolbar -->
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <!-- Mode Toggle -->
+                        <div class="bg-surface-high border border-slate-border rounded-xl p-0.5 flex text-[11px] font-medium">
+                            <button id="btn-edit-mode" onclick="setEditorMode('edit')" class="px-3 py-1 rounded-lg text-primary bg-surface-low shadow">Edit</button>
+                            <button id="btn-preview-mode" onclick="setEditorMode('preview')" class="px-3 py-1 rounded-lg text-slate-text hover:text-on-surface">Preview</button>
+                        </div>
+
+                        <!-- Manual Save Button -->
+                        <button onclick="saveActiveNote()" title="Save Note" class="bg-primary hover:bg-primary-hover text-background font-semibold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1 transition-all">
+                            <span class="material-symbols-outlined text-sm">save</span>
+                            <span class="hidden sm:inline">Save</span>
+                        </button>
+
+                        <!-- Version History Button -->
+                        <button onclick="openVersionHistoryModal()" title="Version History & Restore" class="bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">history</span>
+                            <span class="hidden md:inline">History</span>
+                        </button>
+
+                        <!-- Copy Duplicate Button -->
+                        <button onclick="copyActiveNote()" title="Duplicate Note" class="bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">content_copy</span>
+                        </button>
+
+                        <!-- Export PDF Button -->
+                        <button onclick="exportNotePDF()" title="Export PDF" class="bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">picture_as_pdf</span>
+                        </button>
+
+                        <!-- Export TXT Button -->
+                        <button onclick="exportNoteTXT()" title="Export TXT" class="bg-surface-high hover:bg-surface-high/80 text-on-surface border border-slate-border text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">download</span>
+                        </button>
+
+                        <!-- Export to Google Keep Button -->
+                        <button onclick="exportActiveNoteToKeep()" title="Export Note to Google Keep" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-all">
+                            <span class="material-symbols-outlined text-sm">lightbulb</span>
+                            <span class="hidden lg:inline">To Keep</span>
+                        </button>
+
+                        <!-- Delete Button -->
+                        <button onclick="deleteActiveNote()" title="Delete Note" class="text-slate-text hover:text-red-400 p-1.5 rounded-xl hover:bg-surface-high">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Markdown & LaTeX Quick Formatting Toolbar -->
+                <div id="editor-formatting-bar" class="px-4 py-1.5 bg-surface-low border-b border-slate-border/50 flex items-center gap-1 overflow-x-auto text-xs text-slate-text">
+                    <button onclick="insertFormat('**', '**')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-on-surface font-bold" title="Bold">B</button>
+                    <button onclick="insertFormat('*', '*')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-on-surface italic" title="Italic">I</button>
+                    <button onclick="insertFormat('# ', '')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-on-surface font-semibold" title="Heading 1">H1</button>
+                    <button onclick="insertFormat('## ', '')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-on-surface font-semibold" title="Heading 2">H2</button>
+                    <button onclick="insertFormat('- ', '')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-on-surface" title="List">• List</button>
+                    <button onclick="insertFormat('```\n', '\n```')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-on-surface font-mono" title="Code Block">&lt;/&gt;</button>
+                    <div class="h-4 w-[1px] bg-slate-border mx-1"></div>
+                    <button onclick="insertFormat('$', '$')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-primary font-mono" title="Inline Math">$x$</button>
+                    <button onclick="insertFormat('$$\n', '\n$$')" class="px-2 py-1 rounded hover:bg-surface-high hover:text-primary font-mono" title="Math Block">$$ \int $$</button>
+                    <span id="auto-save-indicator" class="ml-auto text-[10px] text-slate-text/70 italic">Saved</span>
+                </div>
+
+                <!-- Editor Body -->
+                <div class="flex-1 relative overflow-hidden p-4">
+                    <!-- Textarea Editor -->
+                    <textarea id="editor-content" class="w-full h-full bg-transparent text-on-surface font-mono text-sm leading-relaxed resize-none focus:outline-none" placeholder="Start typing markdown, ideas, or equations..." oninput="triggerAutoSave()"></textarea>
+
+                    <!-- Preview Mode Container -->
+                    <div id="editor-preview" class="hidden w-full h-full overflow-y-auto prose prose-invert max-w-none text-on-surface text-sm leading-relaxed p-2">
+                        <!-- Rendered HTML inserted dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+
+    <!-- ========================================== -->
+    <!-- RIGHT SIDEBAR: CALENDAR & VEX AI CHAT (360px) -->
+    <!-- ========================================== -->
+    <aside id="right-sidebar" class="w-80 md:w-90 bg-surface-low border-l border-slate-border flex flex-col flex-shrink-0 z-20 transition-all duration-300">
+        <!-- Header -->
+        <div class="p-3 border-b border-slate-border/80 flex items-center justify-between">
+            <span class="text-xs font-bold text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-base">auto_awesome</span> Vex AI & Calendar
+            </span>
+            <button onclick="toggleRightSidebar()" class="text-slate-text hover:text-on-surface p-1 rounded-lg hover:bg-surface-high">
+                <span class="material-symbols-outlined text-base">chevron_right</span>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-6">
+            
+            <!-- SECTION 1: INTERACTIVE MONTHLY CALENDAR -->
+            <div class="bg-surface-high/50 border border-slate-border/80 rounded-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 id="calendar-month-year" class="text-xs font-bold text-on-surface">July 2026</h4>
+                    <div class="flex items-center gap-1">
+                        <button onclick="changeCalendarMonth(-1)" class="text-slate-text hover:text-on-surface p-1 rounded hover:bg-surface-high">
+                            <span class="material-symbols-outlined text-sm">chevron_left</span>
+                        </button>
+                        <button onclick="changeCalendarMonth(1)" class="text-slate-text hover:text-on-surface p-1 rounded hover:bg-surface-high">
+                            <span class="material-symbols-outlined text-sm">chevron_right</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Calendar Days Header -->
+                <div class="grid grid-cols-7 text-center text-[10px] font-semibold text-slate-text border-b border-slate-border/40 pb-1">
+                    <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+                </div>
+
+                <!-- Days Grid -->
+                <div id="calendar-days-grid" class="grid grid-cols-7 text-center text-xs gap-y-1">
+                    <!-- Days inserted dynamically via JS -->
+                </div>
+            </div>
+
+
+            <!-- SECTION 2: VEX AI CHAT ASSISTANT (GEMINI 2.5 FLASH) -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-primary text-sm">psychology</span> Vex AI Assistant
+                    </h4>
+                    <span class="text-[9px] bg-primary/10 text-primary border border-primary/30 px-1.5 py-0.5 rounded font-mono">Gemini 2.5</span>
+                </div>
+
+                <!-- Quick Prompts -->
+                <div class="flex flex-wrap gap-1.5">
+                    <button onclick="sendQuickPrompt('Summarize this note into 3 key bullet points.')" class="text-[10px] bg-surface-high hover:bg-surface-high/80 border border-slate-border text-slate-text hover:text-on-surface px-2 py-1 rounded-lg">✨ Summarize</button>
+                    <button onclick="sendQuickPrompt('Explain any mathematical formulas or code in this note.')" class="text-[10px] bg-surface-high hover:bg-surface-high/80 border border-slate-border text-slate-text hover:text-on-surface px-2 py-1 rounded-lg">📐 Explain Math</button>
+                    <button onclick="sendQuickPrompt('Suggest 3 related topic ideas or research directions.')" class="text-[10px] bg-surface-high hover:bg-surface-high/80 border border-slate-border text-slate-text hover:text-on-surface px-2 py-1 rounded-lg">💡 Research Ideas</button>
+                </div>
+
+                <!-- Context Checkbox -->
+                <div class="flex items-center gap-2">
+                    <input id="ai-include-context" type="checkbox" checked class="rounded bg-surface-high border-slate-border text-primary focus:ring-0">
+                    <label for="ai-include-context" class="text-[11px] text-slate-text">Include current note context</label>
+                </div>
+
+                <!-- AI Message History -->
+                <div id="ai-chat-history" class="bg-surface-high/30 border border-slate-border/80 rounded-2xl p-3 h-56 overflow-y-auto space-y-3 text-xs">
+                    <div class="bg-surface-high/60 rounded-xl p-2.5 text-slate-text">
+                        Hello! I am Vex AI. Ask me to synthesize notes, explain complex math, or generate code snippets.
+                    </div>
+                </div>
+
+                <!-- AI Chat Input Box -->
+                <div class="flex items-center gap-2">
+                    <input id="ai-chat-input" type="text" placeholder="Ask Vex AI..." class="flex-1 bg-surface-high border border-slate-border rounded-xl p-2 text-xs text-on-surface focus:outline-none focus:border-primary" onkeypress="if(event.key==='Enter') sendAiMessage()">
+                    <button onclick="sendAiMessage()" class="bg-primary hover:bg-primary-hover text-background p-2 rounded-xl flex items-center justify-center">
+                        <span class="material-symbols-outlined text-base">send</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </aside>
+
+
+    <!-- ========================================== -->
+    <!-- JAVASCRIPT APP STATE & LOGIC -->
+    <!-- ========================================== -->
+    <script>
+        // Global App State
+        let currentUser = null;
+        let isDemoMode = false;
+        let userProjects = [];
+        let userFiles = [];
+        let activeProjectId = null;
+        let activeFileId = null;
+        let autoSaveTimer = null;
+        let currentCalendarDate = new Date();
+
+        // Firebase Setup
+        const firebaseConfig = {{ firebase_json | safe if firebase_json else '{}' }};
+        let auth = null;
+
+        if (firebaseConfig && firebaseConfig.apiKey) {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                auth = firebase.auth();
+            } catch(e) {
+                console.warn('Firebase init:', e);
+            }
+        }
+
+        // Initialize App & Auth Guard
+        window.addEventListener('DOMContentLoaded', () => {
+            isDemoMode = localStorage.getItem('vex_demo_mode') === 'true';
+
+            if (isDemoMode) {
+                document.getElementById('demo-badge').classList.remove('hidden');
+                document.getElementById('user-display-name').innerText = 'Guest User';
+                document.getElementById('user-email').innerText = 'guest@vex.local';
+                initApp();
+            } else if (auth) {
+                auth.onAuthStateChanged(user => {
+                    if (user) {
+                        currentUser = user;
+                        document.getElementById('user-display-name').innerText = user.displayName || 'User';
+                        document.getElementById('user-email').innerText = user.email || '';
+                        if (user.photoURL) {
+                            document.getElementById('user-avatar').innerHTML = `<img src="${user.photoURL}" class="w-full h-full rounded-full object-cover">`;
+                        } else {
+                            document.getElementById('user-avatar').innerText = (user.displayName || user.email || 'U')[0].toUpperCase();
+                        }
+                        initApp();
+                    } else {
+                        window.location.href = '/login';
+                    }
+                });
+            } else {
+                // If no firebase and no demo mode, default to demo mode
+                localStorage.setItem('vex_demo_mode', 'true');
+                isDemoMode = true;
+                initApp();
+            }
+
+            renderCalendar();
+            initTypewriterAnimation();
+        });
+
+        async function getAuthToken() {
+            if (isDemoMode) return 'demo-token';
+            if (currentUser) return await currentUser.getIdToken();
+            return 'demo-token';
+        }
+
+        async function apiFetch(url, options = {}) {
+            const token = await getAuthToken();
+            options.headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                ...(options.headers || {})
+            };
+            const resp = await fetch(url, options);
+            if (resp.status === 401) {
+                window.location.href = '/login';
+                throw new Error('Unauthorized');
+            }
+            return resp;
+        }
+
+        // Initialize Data Load
+        async function initApp() {
+            await loadProjects();
+            switchView('dashboard');
+        }
+
+        // Fetch Projects
+        async function loadProjects() {
+            try {
+                const res = await apiFetch('/api/v1/projects');
+                const data = await res.json();
+                userProjects = data.projects || [];
+                
+                renderDashboardProjects();
+                renderProjectsPage();
+                populateProjectDropdowns();
+
+                if (userProjects.length > 0 && !activeProjectId) {
+                    activeProjectId = userProjects[0].id;
+                }
+
+                // Update Stats
+                document.getElementById('stat-projects-count').innerText = userProjects.length;
+            } catch (err) {
+                console.error('Failed to load projects:', err);
+            }
+        }
+
+        // Populate Dropdowns
+        function populateProjectDropdowns() {
+            const quickSelect = document.getElementById('quick-note-project');
+            const wsSelect = document.getElementById('workspace-project-select');
+
+            let html = userProjects.map(p => `<option value="${p.id}">${escapeHtml(p.title)}</option>`).join('');
+            
+            quickSelect.innerHTML = '<option value="">Select Project...</option>' + html;
+            wsSelect.innerHTML = html;
+
+            if (activeProjectId) {
+                wsSelect.value = activeProjectId;
+            }
+        }
+
+        // Render Dashboard View
+        function renderDashboardProjects() {
+            const grid = document.getElementById('dashboard-projects-grid');
+            if (userProjects.length === 0) {
+                grid.innerHTML = `<div class="col-span-full p-6 text-center text-xs text-slate-text bg-surface-low border border-slate-border rounded-2xl">No projects created yet. Click "+ New Project" to get started.</div>`;
+                return;
+            }
+
+            grid.innerHTML = userProjects.slice(0, 3).map(p => `
+                <div onclick="openWorkspaceProject('${p.id}')" class="bg-surface-low border border-slate-border hover:border-primary/50 rounded-2xl p-4 cursor-pointer transition-all space-y-2 group">
+                    <div class="flex items-center justify-between">
+                        <span class="material-symbols-outlined text-primary text-xl">folder</span>
+                        <span class="text-[10px] text-slate-text">${formatDate(p.created_at)}</span>
+                    </div>
+                    <h4 class="text-sm font-bold text-on-surface group-hover:text-primary transition-colors">${escapeHtml(p.title)}</h4>
+                    <p class="text-xs text-slate-text line-clamp-2">${escapeHtml(p.description || 'No description provided.')}</p>
+                </div>
+            `).join('');
+        }
+
+        // Render Projects View
+        function renderProjectsPage() {
+            const grid = document.getElementById('projects-full-grid');
+            if (userProjects.length === 0) {
+                grid.innerHTML = `<div class="col-span-full p-8 text-center text-xs text-slate-text bg-surface-low border border-slate-border rounded-2xl">No projects found. Create your first workspace!</div>`;
+                return;
+            }
+
+            grid.innerHTML = userProjects.map(p => `
+                <div class="bg-surface-low border border-slate-border rounded-2xl p-5 space-y-3 flex flex-col justify-between">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="material-symbols-outlined text-primary text-2xl">folder_special</span>
+                            <button onclick="deleteProject('${p.id}')" class="text-slate-text hover:text-red-400 p-1 rounded"><span class="material-symbols-outlined text-sm">delete</span></button>
+                        </div>
+                        <h3 class="text-base font-bold text-on-surface">${escapeHtml(p.title)}</h3>
+                        <p class="text-xs text-slate-text">${escapeHtml(p.description || 'No description.')}</p>
+                    </div>
+                    <div class="pt-3 border-t border-slate-border/50 flex items-center justify-between">
+                        <span class="text-[10px] text-slate-text">${formatDate(p.created_at)}</span>
+                        <button onclick="openWorkspaceProject('${p.id}')" class="bg-surface-high hover:bg-primary hover:text-background text-on-surface text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-border transition-all flex items-center gap-1">
+                            <span>Open</span> <span class="material-symbols-outlined text-xs">arrow_forward</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Switch View Handler
+        function switchView(viewName) {
+            ['dashboard', 'projects', 'workspace', 'keep'].forEach(v => {
+                const viewEl = document.getElementById(`view-${v}`);
+                if (viewEl) viewEl.classList.add('hidden');
+                const navEl = document.getElementById(`nav-${v}`);
+                if (navEl) {
+                    navEl.classList.remove('active', 'bg-surface-high', 'border', 'border-slate-border/50', 'text-on-surface');
+                    navEl.classList.add('text-slate-text');
+                }
+            });
+
+            const activeView = document.getElementById(`view-${viewName}`);
+            if (activeView) activeView.classList.remove('hidden');
+            const activeNav = document.getElementById(`nav-${viewName}`);
+            if (activeNav) {
+                activeNav.classList.add('active', 'bg-surface-high', 'border', 'border-slate-border/50', 'text-on-surface');
+                activeNav.classList.remove('text-slate-text');
+            }
+
+            const titles = {
+                'dashboard': 'Dashboard Overview',
+                'projects': 'Workspaces & Projects',
+                'workspace': 'Active Note Workspace',
+                'keep': 'Google Keep Workspace Sync'
+            };
+            document.getElementById('current-view-title').innerText = titles[viewName] || 'Workspace';
+
+            if (viewName === 'workspace') {
+                loadActiveProjectFiles();
+            } else if (viewName === 'keep') {
+                fetchGoogleKeepNotes();
+            }
+        }
+
+        // ==========================================
+        // TYPEWRITER ANIMATION FOR H1
+        // ==========================================
+        function initTypewriterAnimation() {
+            const heroEl = document.getElementById('hero-typewriter-text');
+            const brandEl = document.getElementById('typewriter-text');
+            if (!heroEl && !brandEl) return;
+
+            const phrases = ["Think Better", "Do Better", "Work Better", "Write Better", "Plan Better"];
+            let phraseIdx = 0;
+            let charIdx = phrases[0].length;
+            let isDeleting = false;
+
+            function tick() {
+                const current = phrases[phraseIdx];
+                if (isDeleting) {
+                    charIdx--;
+                } else {
+                    charIdx++;
+                }
+
+                const subText = current.substring(0, charIdx);
+                if (heroEl) heroEl.textContent = subText;
+                if (brandEl) brandEl.textContent = subText;
+
+                let delta = isDeleting ? 40 : 80;
+
+                if (!isDeleting && charIdx === current.length) {
+                    delta = 2200; // Pause at end of phrase
+                    isDeleting = true;
+                } else if (isDeleting && charIdx === 0) {
+                    isDeleting = false;
+                    phraseIdx = (phraseIdx + 1) % phrases.length;
+                    delta = 400; // Pause before typing next phrase
+                }
+
+                setTimeout(tick, delta);
+            }
+
+            setTimeout(tick, 800);
+        }
+
+        // ==========================================
+        // GOOGLE KEEP SYNC & INTEGRATION
+        // ==========================================
+        let keepOAuthAccessToken = null;
+        let googleKeepNotes = [];
+
+        async function loginGoogleKeepOAuth() {
+            if (!auth) {
+                showToast('Firebase Auth is offline. Using Guest Keep mode.', 'info');
+                return;
+            }
+
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                provider.addScope('https://www.googleapis.com/auth/keep');
+                
+                showToast('Opening Google Auth popup for Keep permissions...', 'info');
+                const result = await auth.signInWithPopup(provider);
+                if (result && result.credential && result.credential.accessToken) {
+                    keepOAuthAccessToken = result.credential.accessToken;
+                    showToast('Successfully authenticated with Google Keep!', 'success');
+                    fetchGoogleKeepNotes();
+                } else {
+                    showToast('Google Keep authorization completed.', 'success');
+                    fetchGoogleKeepNotes();
+                }
+            } catch (err) {
+                console.error('Keep OAuth Error:', err);
+                showToast('Google OAuth: ' + (err.message || 'Cancelled or unavailable'), 'warning');
+            }
+        }
+
+        async function fetchGoogleKeepNotes() {
+            const container = document.getElementById('keep-notes-grid');
+            if (container) {
+                container.innerHTML = '<p class="text-xs text-slate-text text-center py-10 col-span-full">Syncing with Google Keep API...</p>';
+            }
+
+            try {
+                const headers = {};
+                if (keepOAuthAccessToken) {
+                    headers['Authorization'] = `Bearer ${keepOAuthAccessToken}`;
+                }
+
+                const res = await apiFetch('/api/v1/keep/notes', { headers });
+                if (res.ok) {
+                    const data = await res.json();
+                    googleKeepNotes = data.notes || [];
+                    renderKeepNotesGrid(googleKeepNotes);
+                    
+                    const badge = document.getElementById('keep-auth-badge');
+                    if (badge) {
+                        if (keepOAuthAccessToken) {
+                            badge.innerText = 'Connected Live';
+                            badge.className = 'text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-mono';
+                        } else {
+                            badge.innerText = 'Guest / Demo Mode';
+                            badge.className = 'text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono';
+                        }
+                    }
+                } else {
+                    showToast('Could not fetch Keep notes', 'error');
+                }
+            } catch (err) {
+                console.error('Fetch Keep notes error:', err);
+                showToast('Error syncing with Google Keep', 'error');
+            }
+        }
+
+        function renderKeepNotesGrid(notes) {
+            const container = document.getElementById('keep-notes-grid');
+            const countEl = document.getElementById('keep-notes-count');
+            if (countEl) countEl.innerText = `${notes.length} Keep Notes`;
+
+            if (!notes || notes.length === 0) {
+                container.innerHTML = `<div class="col-span-full p-8 text-center bg-surface-low border border-slate-border rounded-2xl space-y-2">
+                    <span class="material-symbols-outlined text-3xl text-amber-400">lightbulb</span>
+                    <p class="text-xs text-slate-text">No Google Keep notes found. Click "New Keep Note" to create one!</p>
+                </div>`;
+                return;
+            }
+
+            container.innerHTML = notes.map(n => {
+                const noteTitle = n.title || 'Untitled Keep Note';
+                const bodyText = (n.body && n.body.text && n.body.text.text) ? n.body.text.text : (typeof n.body === 'string' ? n.body : 'Empty note');
+                const noteId = n.id || n.name || '';
+                const timeStr = n.createTime ? new Date(n.createTime).toLocaleDateString() : 'Keep Note';
+
+                return `
+                    <div class="bg-surface-low/80 border border-slate-border hover:border-amber-400/50 rounded-2xl p-4 space-y-3 transition-all flex flex-col justify-between shadow-lg">
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2 overflow-hidden">
+                                    <span class="material-symbols-outlined text-amber-400 text-sm">lightbulb</span>
+                                    <h3 class="text-xs font-bold text-on-surface truncate">${escapeHtml(noteTitle)}</h3>
+                                </div>
+                                <span class="text-[9px] text-slate-text font-mono">${timeStr}</span>
+                            </div>
+                            <p class="text-xs text-slate-text font-mono bg-surface-high/60 p-2.5 rounded-xl max-h-32 overflow-y-auto whitespace-pre-wrap">${escapeHtml(bodyText)}</p>
+                        </div>
+                        <div class="pt-2 border-t border-slate-border/50 flex items-center justify-between gap-2">
+                            <button onclick="importKeepNoteToWorkspace('${escapeHtml(noteTitle).replace(/'/g, "\\'")}', '${escapeHtml(bodyText).replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-xl text-xs font-semibold transition-all flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">download</span> Import to Vex
+                            </button>
+                            <button onclick="confirmDeleteKeepNote('${noteId}')" class="p-1.5 text-slate-text hover:text-red-400 rounded-xl hover:bg-surface-high transition-all" title="Delete Keep Note">
+                                <span class="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterKeepNotes() {
+            const query = (document.getElementById('keep-search-input').value || '').toLowerCase().trim();
+            if (!query) {
+                renderKeepNotesGrid(googleKeepNotes);
+                return;
+            }
+
+            const filtered = googleKeepNotes.filter(n => {
+                const t = (n.title || '').toLowerCase();
+                const b = ((n.body && n.body.text && n.body.text.text) || '').toLowerCase();
+                return t.includes(query) || b.includes(query);
+            });
+            renderKeepNotesGrid(filtered);
+        }
+
+        async function confirmCreateKeepNote() {
+            const title = document.getElementById('new-keep-title').value.trim();
+            const content = document.getElementById('new-keep-content').value.trim();
+
+            if (!title) {
+                showToast('Please enter a note title', 'warning');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to create the note "${title}" in your Google Keep account?`)) {
+                return;
+            }
+
+            try {
+                const headers = {};
+                if (keepOAuthAccessToken) {
+                    headers['Authorization'] = `Bearer ${keepOAuthAccessToken}`;
+                }
+
+                const res = await apiFetch('/api/v1/keep/notes', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ title, content })
+                });
+
+                if (res.ok) {
+                    closeModal('modal-new-keep-note');
+                    document.getElementById('new-keep-title').value = '';
+                    document.getElementById('new-keep-content').value = '';
+                    showToast('Note created in Google Keep!', 'success');
+                    fetchGoogleKeepNotes();
+                } else {
+                    showToast('Failed to create note in Google Keep', 'error');
+                }
+            } catch (err) {
+                showToast('Error creating Keep note', 'error');
+            }
+        }
+
+        function importKeepNoteToWorkspace(title, content) {
+            if (!activeProjectId && userProjects.length > 0) {
+                activeProjectId = userProjects[0].id;
+            }
+
+            switchView('workspace');
+            setTimeout(async () => {
+                try {
+                    const res = await apiFetch('/api/v1/files', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            project_id: activeProjectId,
+                            title: `[Keep] ${title}`,
+                            content: content,
+                            folder: 'Google Keep'
+                        })
+                    });
+
+                    if (res.ok) {
+                        const newFile = await res.json();
+                        await loadActiveProjectFiles();
+                        selectNote(newFile.id);
+                        showToast('Imported Google Keep note into Vex Workspace!', 'success');
+                    }
+                } catch (err) {
+                    showToast('Error importing Keep note', 'error');
+                }
+            }, 100);
+        }
+
+        async function exportActiveNoteToKeep() {
+            const title = document.getElementById('note-title-input').value.trim() || 'Untitled Vex Note';
+            const content = document.getElementById('editor-content').value;
+
+            if (!content) {
+                showToast('Cannot export an empty note to Keep', 'warning');
+                return;
+            }
+
+            if (!confirm(`Confirm: Do you want to export "${title}" as a new note to Google Keep?`)) {
+                return;
+            }
+
+            try {
+                const headers = {};
+                if (keepOAuthAccessToken) {
+                    headers['Authorization'] = `Bearer ${keepOAuthAccessToken}`;
+                }
+
+                const res = await apiFetch('/api/v1/keep/notes', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ title: `[Vex] ${title}`, content: content })
+                });
+
+                if (res.ok) {
+                    showToast('Exported note to Google Keep!', 'success');
+                } else {
+                    showToast('Failed to export to Google Keep', 'error');
+                }
+            } catch (err) {
+                showToast('Error exporting to Google Keep', 'error');
+            }
+        }
+
+        async function confirmDeleteKeepNote(noteId) {
+            if (!confirm('Are you sure you want to delete this note from Google Keep?')) {
+                return;
+            }
+
+            try {
+                const headers = {};
+                if (keepOAuthAccessToken) {
+                    headers['Authorization'] = `Bearer ${keepOAuthAccessToken}`;
+                }
+
+                const cleanId = noteId.replace('notes/', '');
+                const res = await apiFetch(`/api/v1/keep/notes/${cleanId}`, {
+                    method: 'DELETE',
+                    headers: headers
+                });
+
+                if (res.ok) {
+                    showToast('Deleted note from Google Keep', 'success');
+                    fetchGoogleKeepNotes();
+                } else {
+                    showToast('Failed to delete Keep note', 'error');
+                }
+            } catch (err) {
+                showToast('Error deleting Keep note', 'error');
+            }
+        }
+
+        // Open Workspace with Project ID
+        function openWorkspaceProject(projectId) {
+            activeProjectId = projectId;
+            populateProjectDropdowns();
+            switchView('workspace');
+        }
+
+        // Load Files for Active Project
+        async function loadActiveProjectFiles() {
+            if (!activeProjectId) return;
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${activeProjectId}/files`);
+                const data = await res.json();
+                userFiles = data.files || [];
+                renderNotesList();
+
+                // Total notes count update
+                document.getElementById('stat-notes-count').innerText = userFiles.length;
+
+                if (userFiles.length > 0) {
+                    selectNote(userFiles[0].id);
+                } else {
+                    clearEditor();
+                }
+            } catch (err) {
+                console.error('Failed to load project files:', err);
+            }
+        }
+
+        // Render Notes List in Workspace
+        function renderNotesList() {
+            const container = document.getElementById('notes-list-container');
+            if (userFiles.length === 0) {
+                container.innerHTML = `<div class="p-4 text-center text-[11px] text-slate-text">No notes yet. Click + to add one.</div>`;
+                return;
+            }
+
+            container.innerHTML = userFiles.map(f => `
+                <div onclick="selectNote('${f.id}')" class="note-item p-2.5 rounded-xl cursor-pointer transition-all border ${f.id === activeFileId ? 'bg-surface-high border-primary/40 text-on-surface' : 'border-transparent hover:bg-surface-high/50 text-slate-text hover:text-on-surface'} space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold truncate ${f.id === activeFileId ? 'text-primary' : ''}">${escapeHtml(f.title)}</span>
+                        <span class="text-[9px] bg-surface-high px-1.5 py-0.5 rounded text-slate-text font-mono">${escapeHtml(f.folder || 'Gen')}</span>
+                    </div>
+                    <p class="text-[10px] text-slate-text truncate">${escapeHtml(f.content ? f.content.substring(0, 40) : 'Empty note...')}</p>
+                </div>
+            `).join('');
+        }
+
+        // Select Active Note
+        function selectNote(fileId) {
+            activeFileId = fileId;
+            renderNotesList();
+
+            const file = userFiles.find(f => f.id === fileId);
+            if (!file) return;
+
+            document.getElementById('note-title-input').value = file.title || '';
+            document.getElementById('note-folder-input').value = file.folder || 'General';
+            document.getElementById('editor-content').value = file.content || '';
+
+            renderPreview();
+        }
+
+        // Clear Editor
+        function clearEditor() {
+            activeFileId = null;
+            document.getElementById('note-title-input').value = '';
+            document.getElementById('note-folder-input').value = '';
+            document.getElementById('editor-content').value = '';
+            document.getElementById('editor-preview').innerHTML = '';
+        }
+
+        // Editor Mode (Edit vs Preview)
+        function setEditorMode(mode) {
+            const editBtn = document.getElementById('btn-edit-mode');
+            const previewBtn = document.getElementById('btn-preview-mode');
+            const textarea = document.getElementById('editor-content');
+            const previewDiv = document.getElementById('editor-preview');
+
+            if (mode === 'edit') {
+                editBtn.classList.add('text-primary', 'bg-surface-low', 'shadow');
+                editBtn.classList.remove('text-slate-text');
+                previewBtn.classList.remove('text-primary', 'bg-surface-low', 'shadow');
+                previewBtn.classList.add('text-slate-text');
+
+                textarea.classList.remove('hidden');
+                previewDiv.classList.add('hidden');
+            } else {
+                previewBtn.classList.add('text-primary', 'bg-surface-low', 'shadow');
+                previewBtn.classList.remove('text-slate-text');
+                editBtn.classList.remove('text-primary', 'bg-surface-low', 'shadow');
+                editBtn.classList.add('text-slate-text');
+
+                textarea.classList.add('hidden');
+                previewDiv.classList.remove('hidden');
+                renderPreview();
+            }
+        }
+
+        // Render Markdown & KaTeX Math Preview
+        function renderPreview() {
+            const rawContent = document.getElementById('editor-content').value;
+            const previewDiv = document.getElementById('editor-preview');
+
+            if (window.marked) {
+                previewDiv.innerHTML = marked.parse(rawContent);
+            } else {
+                previewDiv.innerText = rawContent;
+            }
+
+            if (window.renderMathInElement) {
+                renderMathInElement(previewDiv, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ],
+                    throwOnError: false
+                });
+            }
+        }
+
+        // Formatting Helpers
+        function insertFormat(startTag, endTag) {
+            const textarea = document.getElementById('editor-content');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            const selectedText = text.substring(start, end) || 'text';
+            const replacement = startTag + selectedText + endTag;
+
+            textarea.value = text.substring(0, start) + replacement + text.substring(end);
+            textarea.focus();
+            textarea.setSelectionRange(start + startTag.length, start + startTag.length + selectedText.length);
+
+            triggerAutoSave();
+        }
+
+        // Auto Save Debounce
+        function triggerAutoSave() {
+            document.getElementById('auto-save-indicator').innerText = 'Saving...';
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                saveActiveNote(true);
+            }, 1500);
+        }
+
+        // Save Active Note
+        async function saveActiveNote(silent = false) {
+            if (!activeProjectId || !activeFileId) return;
+
+            const title = document.getElementById('note-title-input').value.trim() || 'Untitled Note';
+            const folder = document.getElementById('note-folder-input').value.trim() || 'General';
+            const content = document.getElementById('editor-content').value;
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${activeProjectId}/files/${activeFileId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ title, folder, content })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const index = userFiles.findIndex(f => f.id === activeFileId);
+                    if (index !== -1) userFiles[index] = data.file;
+
+                    document.getElementById('auto-save-indicator').innerText = 'Saved';
+                    renderNotesList();
+
+                    if (!silent) showToast('Note saved successfully', 'success');
+                }
+            } catch (err) {
+                document.getElementById('auto-save-indicator').innerText = 'Save Error';
+                if (!silent) showToast('Error saving note', 'error');
+            }
+        }
+
+        // Create New Note in Active Project
+        async function createNewNoteInActiveProject() {
+            if (!activeProjectId) {
+                showToast('Please select or create a project first', 'warning');
+                return;
+            }
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${activeProjectId}/files`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        title: 'New Note',
+                        content: '',
+                        folder: 'General'
+                    })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    userFiles.unshift(data.file);
+                    renderNotesList();
+                    selectNote(data.file.id);
+                    showToast('New note created', 'success');
+                }
+            } catch (err) {
+                showToast('Failed to create note', 'error');
+            }
+        }
+
+        // Quick Note Save from Dashboard
+        async function saveQuickNote() {
+            const projId = document.getElementById('quick-note-project').value || activeProjectId;
+            const title = document.getElementById('quick-note-title').value.trim();
+            const content = document.getElementById('quick-note-content').value.trim();
+
+            if (!projId) {
+                showToast('Select a project for the quick note', 'warning');
+                return;
+            }
+            if (!title) {
+                showToast('Enter a note title', 'warning');
+                return;
+            }
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${projId}/files`, {
+                    method: 'POST',
+                    body: JSON.stringify({ title, content, folder: 'Quick' })
+                });
+
+                if (res.ok) {
+                    document.getElementById('quick-note-title').value = '';
+                    document.getElementById('quick-note-content').value = '';
+                    showToast('Quick note saved to workspace!', 'success');
+                    if (projId === activeProjectId) loadActiveProjectFiles();
+                }
+            } catch (err) {
+                showToast('Error saving quick note', 'error');
+            }
+        }
+
+        // Copy / Duplicate Note
+        async function copyActiveNote() {
+            if (!activeProjectId || !activeFileId) return;
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${activeProjectId}/files/${activeFileId}/copy`, {
+                    method: 'POST'
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    userFiles.unshift(data.file);
+                    renderNotesList();
+                    selectNote(data.file.id);
+                    showToast('Note duplicated', 'success');
+                }
+            } catch (err) {
+                showToast('Error duplicating note', 'error');
+            }
+        }
+
+        // Delete Note
+        async function deleteActiveNote() {
+            if (!activeProjectId || !activeFileId) return;
+
+            if (!confirm('Are you sure you want to delete this note?')) return;
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${activeProjectId}/files/${activeFileId}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    userFiles = userFiles.filter(f => f.id !== activeFileId);
+                    renderNotesList();
+                    if (userFiles.length > 0) {
+                        selectNote(userFiles[0].id);
+                    } else {
+                        clearEditor();
+                    }
+                    showToast('Note deleted', 'success');
+                }
+            } catch (err) {
+                showToast('Error deleting note', 'error');
+            }
+        }
+
+        // Create Project Modal Submit
+        async function createProjectSubmit() {
+            const title = document.getElementById('new-proj-title').value.trim();
+            const description = document.getElementById('new-proj-desc').value.trim();
+
+            if (!title) {
+                showToast('Project title is required', 'warning');
+                return;
+            }
+
+            try {
+                const res = await apiFetch('/api/v1/projects', {
+                    method: 'POST',
+                    body: JSON.stringify({ title, description })
+                });
+
+                if (res.ok) {
+                    closeModal('modal-new-project');
+                    document.getElementById('new-proj-title').value = '';
+                    document.getElementById('new-proj-desc').value = '';
+                    showToast('Project created!', 'success');
+                    await loadProjects();
+                }
+            } catch (err) {
+                showToast('Error creating project', 'error');
+            }
+        }
+
+        // Delete Project
+        async function deleteProject(projectId) {
+            if (!confirm('Delete this project and all its notes?')) return;
+
+            try {
+                const res = await apiFetch(`/api/v1/projects/${projectId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast('Project deleted', 'success');
+                    await loadProjects();
+                }
+            } catch (err) {
+                showToast('Error deleting project', 'error');
+            }
+        }
+
+        // Export PDF
+        function exportNotePDF() {
+            const title = document.getElementById('note-title-input').value || 'Note';
+            const rawContent = document.getElementById('editor-content').value;
+            const element = document.createElement('div');
+            element.className = 'p-8 font-sans text-slate-900 bg-white';
+            element.style.color = '#1e293b';
+            element.style.backgroundColor = '#ffffff';
+
+            const parsedMarkdown = window.marked ? marked.parse(rawContent) : escapeHtml(rawContent);
+            element.innerHTML = `
+                <div style="font-family: Inter, sans-serif; padding: 20px;">
+                    <h1 style="font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">${escapeHtml(title)}</h1>
+                    <div style="font-size: 11px; color: #64748b; margin-bottom: 16px;">Exported from Vex Workspace • ${new Date().toLocaleDateString()}</div>
+                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin-bottom: 20px;">
+                    <div style="line-height: 1.6; font-size: 14px;">${parsedMarkdown}</div>
+                </div>
+            `;
+
+            if (window.renderMathInElement) {
+                renderMathInElement(element, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ],
+                    throwOnError: false
+                });
+            }
+
+            const opt = {
+                margin: 0.5,
+                filename: `${title.toLowerCase().replace(/\s+/g, '_')}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            if (window.html2pdf) {
+                html2pdf().set(opt).from(element).save();
+                showToast('Exporting PDF...', 'success');
+            } else {
+                showToast('PDF export library loading. Please try again.', 'warning');
+            }
+        }
+
+        // Export TXT
+        function exportNoteTXT() {
+            const title = document.getElementById('note-title-input').value || 'Note';
+            const content = document.getElementById('editor-content').value;
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${title.toLowerCase().replace(/\s+/g, '_')}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Exported Markdown file', 'success');
+        }
+
+        // Vex AI Chat Assistant
+        async function sendAiMessage() {
+            const input = document.getElementById('ai-chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = '';
+            appendChatMessage('user', message);
+
+            const includeContext = document.getElementById('ai-include-context').checked;
+            const noteContext = includeContext ? document.getElementById('editor-content').value : '';
+
+            try {
+                const res = await fetch('/api/v1/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, context: noteContext })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.reply) {
+                    appendChatMessage('assistant', data.reply);
+                } else {
+                    appendChatMessage('assistant', `⚠️ ${data.detail || 'Could not connect to AI service.'}`);
+                }
+            } catch (err) {
+                appendChatMessage('assistant', '⚠️ Error contacting Vex AI endpoint.');
+            }
+        }
+
+        function sendQuickPrompt(promptText) {
+            document.getElementById('ai-chat-input').value = promptText;
+            sendAiMessage();
+        }
+
+        function appendChatMessage(role, text) {
+            const history = document.getElementById('ai-chat-history');
+            const msgDiv = document.createElement('div');
+            
+            if (role === 'user') {
+                msgDiv.className = 'bg-primary/10 border border-primary/20 text-on-surface rounded-xl p-2.5 ml-4 text-right';
+            } else {
+                msgDiv.className = 'bg-surface-high border border-slate-border text-on-surface rounded-xl p-2.5 mr-4';
+            }
+
+            msgDiv.innerHTML = marked.parse(text);
+            history.appendChild(msgDiv);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        // Calendar Render
+        function renderCalendar() {
+            const monthYearLabel = document.getElementById('calendar-month-year');
+            const daysGrid = document.getElementById('calendar-days-grid');
+
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+
+            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            monthYearLabel.innerText = `${monthNames[month]} ${year}`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            // Adjust firstDay for Monday start
+            let startOffset = firstDay === 0 ? 6 : firstDay - 1;
+
+            let html = '';
+            for (let i = 0; i < startOffset; i++) {
+                html += `<span></span>`;
+            }
+
+            const today = new Date();
+            for (let d = 1; d <= daysInMonth; d++) {
+                const isToday = today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+                html += `
+                    <div class="py-1 cursor-pointer hover:bg-surface-high rounded-lg font-medium ${isToday ? 'bg-primary text-background font-bold shadow' : 'text-slate-text'}">
+                        ${d}
+                    </div>
+                `;
+            }
+
+            daysGrid.innerHTML = html;
+        }
+
+        function changeCalendarMonth(delta) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+            renderCalendar();
+        }
+
+        // Right Sidebar Toggle
+        function toggleRightSidebar() {
+            const sidebar = document.getElementById('right-sidebar');
+            sidebar.classList.toggle('hidden');
+        }
+
+        // Modal Helpers
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            document.getElementById(id).classList.add('flex');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
+        }
+
+        function onWorkspaceProjectChange() {
+            activeProjectId = document.getElementById('workspace-project-select').value;
+            loadActiveProjectFiles();
+        }
+
+        // Toast Notification System
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgColors = {
+                success: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
+                error: 'bg-red-500/20 border-red-500/40 text-red-300',
+                warning: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
+                info: 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+            };
+
+            toast.className = `p-3 rounded-xl border ${bgColors[type] || bgColors.info} backdrop-blur-md shadow-xl text-xs font-semibold flex items-center gap-2 pointer-events-auto transition-all transform duration-300 translate-y-2 opacity-0`;
+            toast.innerText = message;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('vex_demo_mode');
+            if (auth) {
+                auth.signOut().then(() => {
+                    window.location.href = '/login';
+                });
+            } else {
+                window.location.href = '/login';
+            }
+        }
+
+        // Escape HTML
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // Format Date
+        function formatDate(isoStr) {
+            if (!isoStr) return '';
+            const d = new Date(isoStr);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        // ==========================================
+        // GLOBAL SEARCH MODAL
+        // ==========================================
+        function openGlobalSearchModal() {
+            openModal('modal-global-search');
+            const input = document.getElementById('global-search-input');
+            input.value = '';
+            input.focus();
+            document.getElementById('global-search-results').innerHTML = '<p class="text-xs text-slate-text text-center py-6">Type a keyword to search across all projects and notes...</p>';
+        }
+
+        async function performGlobalSearch() {
+            const query = document.getElementById('global-search-input').value.trim();
+            const container = document.getElementById('global-search-results');
+
+            if (!query) {
+                container.innerHTML = '<p class="text-xs text-slate-text text-center py-6">Type a keyword to search across all projects and notes...</p>';
+                return;
+            }
+
+            try {
+                const res = await apiFetch(`/api/v1/search?q=${encodeURIComponent(query)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const projects = data.projects || [];
+                    const notes = data.notes || [];
+
+                    if (projects.length === 0 && notes.length === 0) {
+                        container.innerHTML = `<p class="text-xs text-slate-text text-center py-6">No matching projects or notes found for "${escapeHtml(query)}"</p>`;
+                        return;
+                    }
+
+                    let html = '';
+
+                    if (projects.length > 0) {
+                        html += `<div class="text-[11px] font-bold text-primary uppercase tracking-wider mb-1">Projects (${projects.length})</div>`;
+                        projects.forEach(p => {
+                            html += `
+                                <div onclick="selectSearchResult('project', '${p.id}')" class="p-3 bg-surface-high/60 border border-slate-border hover:border-primary/50 rounded-xl cursor-pointer transition-all flex items-center justify-between">
+                                    <div class="flex items-center gap-2.5 overflow-hidden">
+                                        <span class="material-symbols-outlined text-primary text-base">folder</span>
+                                        <div class="truncate">
+                                            <p class="text-xs font-semibold text-on-surface truncate">${escapeHtml(p.title)}</p>
+                                            <p class="text-[10px] text-slate-text truncate">${escapeHtml(p.description || 'No description')}</p>
+                                        </div>
+                                    </div>
+                                    <span class="material-symbols-outlined text-slate-text text-sm">arrow_forward</span>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    if (notes.length > 0) {
+                        html += `<div class="text-[11px] font-bold text-primary uppercase tracking-wider mt-3 mb-1">Notes (${notes.length})</div>`;
+                        notes.forEach(n => {
+                            const snippet = (n.content || '').substring(0, 90);
+                            html += `
+                                <div onclick="selectSearchResult('note', '${n.id}', '${n.project_id}')" class="p-3 bg-surface-high/60 border border-slate-border hover:border-primary/50 rounded-xl cursor-pointer transition-all flex items-center justify-between">
+                                    <div class="flex items-center gap-2.5 overflow-hidden">
+                                        <span class="material-symbols-outlined text-blue-400 text-base">description</span>
+                                        <div class="truncate">
+                                            <p class="text-xs font-semibold text-on-surface truncate">${escapeHtml(n.title)}</p>
+                                            <p class="text-[10px] text-slate-text truncate">${escapeHtml(snippet || 'Empty note')}</p>
+                                        </div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-text font-mono flex-shrink-0">${formatDate(n.updated_at)}</span>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    container.innerHTML = html;
+                }
+            } catch (err) {
+                container.innerHTML = '<p class="text-xs text-red-400 text-center py-6">Error searching projects and notes.</p>';
+            }
+        }
+
+        function selectSearchResult(type, id, projectId) {
+            closeModal('modal-global-search');
+            if (type === 'project') {
+                switchView('workspace');
+                activeProjectId = id;
+                document.getElementById('workspace-project-select').value = id;
+                loadActiveProjectFiles();
+            } else if (type === 'note') {
+                switchView('workspace');
+                if (projectId) {
+                    activeProjectId = projectId;
+                    document.getElementById('workspace-project-select').value = projectId;
+                }
+                loadActiveProjectFiles().then(() => {
+                    selectNote(id);
+                });
+            }
+        }
+
+        // ==========================================
+        // NOTE VERSION HISTORY MODAL
+        // ==========================================
+        async function openVersionHistoryModal() {
+            if (!activeFileId) {
+                showToast('Open a note first to view version history', 'warning');
+                return;
+            }
+
+            openModal('modal-version-history');
+            const listContainer = document.getElementById('version-history-list');
+            listContainer.innerHTML = '<p class="text-xs text-slate-text text-center py-6">Loading version history...</p>';
+
+            try {
+                const res = await apiFetch(`/api/v1/notes/${activeFileId}/versions`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const versions = data.versions || [];
+
+                    if (versions.length === 0) {
+                        listContainer.innerHTML = '<p class="text-xs text-slate-text text-center py-6">No previous versions saved for this note yet. Save edits to create version snapshots.</p>';
+                        return;
+                    }
+
+                    let html = '';
+                    versions.forEach((v, idx) => {
+                        const snippet = (v.content || '').substring(0, 120);
+                        const timeStr = v.saved_at ? new Date(v.saved_at).toLocaleString() : 'Earlier';
+                        html += `
+                            <div class="p-3 bg-surface-high border border-slate-border rounded-xl space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-xs text-primary">history</span>
+                                        <span class="text-xs font-bold text-on-surface">${escapeHtml(v.title || 'Note Version')}</span>
+                                        ${idx === 0 ? '<span class="text-[9px] bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.5 rounded font-mono">Latest</span>' : ''}
+                                    </div>
+                                    <span class="text-[10px] text-slate-text font-mono">${timeStr}</span>
+                                </div>
+                                <p class="text-xs text-slate-text font-mono bg-surface-low p-2 rounded-lg truncate">${escapeHtml(snippet || 'Empty snapshot')}</p>
+                                <div class="flex justify-end pt-1">
+                                    <button onclick="restoreVersion('${v.id}')" class="px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg text-xs font-medium transition-all flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-xs">restore</span> Restore Version
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    listContainer.innerHTML = html;
+                }
+            } catch (err) {
+                listContainer.innerHTML = '<p class="text-xs text-red-400 text-center py-6">Error loading version history.</p>';
+            }
+        }
+
+        async function restoreVersion(versionId) {
+            if (!activeFileId) return;
+
+            try {
+                const res = await apiFetch(`/api/v1/notes/${activeFileId}/restore`, {
+                    method: 'POST',
+                    body: JSON.stringify({ version_id: versionId })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('note-title-input').value = data.title || 'Note';
+                    document.getElementById('editor-content').value = data.content || '';
+                    renderPreview();
+
+                    const currentNote = userFiles.find(f => f.id === activeFileId);
+                    if (currentNote) {
+                        currentNote.title = data.title;
+                        currentNote.content = data.content;
+                    }
+                    renderNotesList();
+
+                    closeModal('modal-version-history');
+                    showToast('Note restored to selected version!', 'success');
+                } else {
+                    showToast('Failed to restore version', 'error');
+                }
+            } catch (err) {
+                showToast('Error restoring note version', 'error');
+            }
+        }
+
+        // ==========================================
+        // GLOBAL KEYBOARD SHORTCUTS
+        // ==========================================
+        window.addEventListener('keydown', function(e) {
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+            if (cmdOrCtrl && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                openGlobalSearchModal();
+            } else if (cmdOrCtrl && e.key.toLowerCase() === 'n') {
+                e.preventDefault();
+                if (currentView !== 'workspace') switchView('workspace');
+                createNewNoteInActiveProject();
+            } else if (cmdOrCtrl && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                saveActiveNote(false);
+            } else if (cmdOrCtrl && e.key.toLowerCase() === 'e') {
+                e.preventDefault();
+                if (currentView === 'workspace') {
+                    const currentMode = document.getElementById('btn-edit-mode').classList.contains('text-primary') ? 'edit' : 'preview';
+                    setEditorMode(currentMode === 'edit' ? 'preview' : 'edit');
+                }
+            } else if (e.key === 'Escape') {
+                closeModal('modal-global-search');
+                closeModal('modal-version-history');
+                closeModal('modal-new-project');
+            }
+        });
+    </script>
+</body>
+</html>

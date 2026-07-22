@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vex Workspace | Settings & Developer API</title>
+
+    <!-- Google Fonts & Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "background": "#131316",
+                        "surface-low": "#1b1b1e",
+                        "surface-high": "#2a2a2d",
+                        "primary": "#63dac3",
+                        "primary-hover": "#42cbb1",
+                        "on-surface": "#e4e1e6",
+                        "slate-border": "#27272A",
+                        "slate-text": "#8e8e93"
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Firebase Web SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-background text-on-surface h-full flex flex-col font-sans">
+
+    <!-- Header -->
+    <header class="h-16 border-b border-slate-border px-6 flex items-center justify-between bg-surface-low">
+        <div class="flex items-center gap-3">
+            <a href="/dashboard" class="flex items-center gap-2 text-slate-text hover:text-on-surface text-xs font-semibold bg-surface-high border border-slate-border px-3 py-1.5 rounded-xl transition-all">
+                <span class="material-symbols-outlined text-sm">arrow_back</span> Back to Workspace
+            </a>
+            <h1 class="text-sm font-bold text-on-surface">Account Settings & Developer Portal</h1>
+        </div>
+        <button onclick="logout()" class="text-xs text-red-400 hover:underline">Sign Out</button>
+    </header>
+
+    <!-- Main Settings Body -->
+    <main class="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full space-y-8">
+        
+        <!-- Profile Card -->
+        <div class="bg-surface-low border border-slate-border rounded-2xl p-6 space-y-4">
+            <h2 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">person</span> Profile & Authentication
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                    <label class="block text-slate-text mb-1">Display Name</label>
+                    <input id="setting-display-name" type="text" class="w-full bg-surface-high border border-slate-border rounded-xl p-2.5 text-on-surface focus:outline-none focus:border-primary">
+                </div>
+                <div>
+                    <label class="block text-slate-text mb-1">Email Address</label>
+                    <input id="setting-email" type="email" disabled class="w-full bg-surface-high/50 border border-slate-border text-slate-text rounded-xl p-2.5 cursor-not-allowed">
+                </div>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="updateProfile()" class="bg-primary hover:bg-primary-hover text-background font-semibold text-xs px-4 py-2 rounded-xl">Save Changes</button>
+            </div>
+        </div>
+
+        <!-- Developer API Keys Card -->
+        <div class="bg-surface-low border border-slate-border rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">key</span> Developer API Keys
+                    </h2>
+                    <p class="text-xs text-slate-text mt-0.5">Generate API keys to interact programmatically with your Vex Workspace notes.</p>
+                </div>
+                <button onclick="generateApiKey()" class="bg-surface-high hover:bg-primary hover:text-background border border-slate-border text-on-surface text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">add</span> Generate Key
+                </button>
+            </div>
+
+            <!-- Keys List -->
+            <div id="keys-list-container" class="space-y-3 pt-2">
+                <!-- Keys inserted dynamically -->
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const firebaseConfig = {{ firebase_json | safe if firebase_json else '{}' }};
+        let auth = null;
+        let isDemoMode = localStorage.getItem('vex_demo_mode') === 'true';
+
+        if (firebaseConfig && firebaseConfig.apiKey) {
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+            } catch(e) {}
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (isDemoMode) {
+                document.getElementById('setting-display-name').value = 'Guest User';
+                document.getElementById('setting-email').value = 'guest@vex.local';
+                loadDeveloperKeys();
+            } else if (auth) {
+                auth.onAuthStateChanged(user => {
+                    if (user) {
+                        document.getElementById('setting-display-name').value = user.displayName || '';
+                        document.getElementById('setting-email').value = user.email || '';
+                        loadDeveloperKeys();
+                    } else {
+                        window.location.href = '/login';
+                    }
+                });
+            } else {
+                window.location.href = '/login';
+            }
+        });
+
+        async function getAuthToken() {
+            if (isDemoMode) return 'demo-token';
+            if (auth && auth.currentUser) return await auth.currentUser.getIdToken();
+            return 'demo-token';
+        }
+
+        async function loadDeveloperKeys() {
+            const token = await getAuthToken();
+            try {
+                const res = await fetch('/api/v1/developer/keys', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                renderKeys(data.keys || []);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderKeys(keys) {
+            const container = document.getElementById('keys-list-container');
+            if (keys.length === 0) {
+                container.innerHTML = `<div class="p-4 text-center text-xs text-slate-text border border-slate-border rounded-xl">No API keys generated yet.</div>`;
+                return;
+            }
+
+            container.innerHTML = keys.map(k => `
+                <div class="bg-surface-high border border-slate-border rounded-xl p-3 flex items-center justify-between text-xs">
+                    <div>
+                        <p class="font-bold text-on-surface">${k.name}</p>
+                        <p class="font-mono text-slate-text text-[11px]">${k.key}</p>
+                    </div>
+                    <button onclick="deleteKey('${k.id}')" class="text-slate-text hover:text-red-400 p-1.5 rounded-lg hover:bg-surface-low">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function generateApiKey() {
+            const name = prompt('Enter a label for this API Key:', 'Production Key');
+            if (!name) return;
+
+            const token = await getAuthToken();
+            try {
+                const res = await fetch('/api/v1/developer/keys', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ name })
+                });
+                if (res.ok) loadDeveloperKeys();
+            } catch (err) {}
+        }
+
+        async function deleteKey(keyId) {
+            if (!confirm('Revoke this API Key?')) return;
+            const token = await getAuthToken();
+            try {
+                await fetch(`/api/v1/developer/keys/${keyId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                loadDeveloperKeys();
+            } catch (err) {}
+        }
+
+        async function updateProfile() {
+            const newName = document.getElementById('setting-display-name').value.trim();
+            if (!newName) {
+                alert('Display name cannot be empty.');
+                return;
+            }
+
+            if (isDemoMode) {
+                alert('Display name updated to: ' + newName);
+                return;
+            }
+
+            if (auth && auth.currentUser) {
+                try {
+                    await auth.currentUser.updateProfile({ displayName: newName });
+                    alert('Profile updated successfully!');
+                } catch (err) {
+                    alert('Error updating profile: ' + (err.message || err));
+                }
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('vex_demo_mode');
+            if (auth) auth.signOut().then(() => window.location.href = '/login');
+            else window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>
