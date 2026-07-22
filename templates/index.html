@@ -93,7 +93,7 @@
             New: Our AI integration just landed
         </div>
         <h1 class="font-headline-xl text-headline-xl md:text-[80px] md:leading-[1.1] mb-6 tracking-tighter">
-            Think better with <span class="text-primary text-glow">Vex</span>
+            <span id="typewriter-hero" class="text-primary text-glow">Think Better</span><span class="animate-pulse text-primary font-bold">|</span> with Vex
         </h1>
         <p class="font-body-lg text-body-lg text-slate-text max-w-2xl mx-auto mb-12">
             Never miss a note, idea or connection. Mirror the way your mind works with the world's most intuitive networked thought platform.
@@ -197,5 +197,58 @@
         </div>
     </div>
 </footer>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+    const firebaseConfig = {{ firebase_json | safe if firebase_json else '{}' }};
+    if (firebaseConfig && firebaseConfig.apiKey) {
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            firebase.auth().onAuthStateChanged(user => {
+                if (user) {
+                    window.location.href = '/dashboard';
+                }
+            });
+        } catch (e) {}
+    }
+
+    // Typewriter Animation
+    window.addEventListener('DOMContentLoaded', () => {
+        const el = document.getElementById('typewriter-hero');
+        if (!el) return;
+
+        const phrases = ["Think Better", "Do Better", "Work Better", "Write Better", "Plan Better"];
+        let phraseIdx = 0;
+        let charIdx = phrases[0].length;
+        let isDeleting = false;
+
+        function tick() {
+            const current = phrases[phraseIdx];
+            if (isDeleting) {
+                charIdx--;
+            } else {
+                charIdx++;
+            }
+
+            el.textContent = current.substring(0, charIdx);
+
+            let delta = isDeleting ? 40 : 80;
+
+            if (!isDeleting && charIdx === current.length) {
+                delta = 2200;
+                isDeleting = true;
+            } else if (isDeleting && charIdx === 0) {
+                isDeleting = false;
+                phraseIdx = (phraseIdx + 1) % phrases.length;
+                delta = 400;
+            }
+
+            setTimeout(tick, delta);
+        }
+
+        setTimeout(tick, 1000);
+    });
+</script>
 </body>
 </html>

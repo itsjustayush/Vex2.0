@@ -10,45 +10,23 @@ from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
 import requests
 
+# Load environment variables from .env file
 load_dotenv()
 
+# Initialize Flask application (Serverless & WSGI compatible)
 app = Flask(__name__, template_folder='templates')
+handler = app  # Explicit Vercel Serverless Function entrypoint alias
 
-# Secret Key for signing Developer JWT Tokens
+# ==========================================
+# CONSOLIDATED GLOBAL VARIABLES & CONFIG
+# ==========================================
 API_SECRET_KEY = os.getenv("API_SECRET_KEY", "vex-super-secret-jwt-key-change-in-prod")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')
-
-def _base64url_decode(s: str) -> bytes:
-    padding = '=' * (4 - (len(s) % 4))
-    return base64.urlsafe_b64decode(s + padding)
-
-def encode_jwt_token(payload: dict, secret: str = API_SECRET_KEY) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_b64 = _base64url_encode(json.dumps(header, separators=(',', ':')).encode('utf-8'))
-    payload_b64 = _base64url_encode(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
-    signing_input = f"{header_b64}.{payload_b64}"
-    signature = hmac.new(secret.encode('utf-8'), signing_input.encode('utf-8'), hashlib.sha256).digest()
-    sig_b64 = _base64url_encode(signature)
-    return f"{signing_input}.{sig_b64}"
-
-def decode_jwt_token(token: str, secret: str = API_SECRET_KEY) -> dict:
-    parts = token.split('.')
-    if len(parts) != 3:
-        raise ValueError("Invalid JWT token format")
-    header_b64, payload_b64, sig_b64 = parts
-    signing_input = f"{header_b64}.{payload_b64}"
-    expected_sig = hmac.new(secret.encode('utf-8'), signing_input.encode('utf-8'), hashlib.sha256).digest()
-    actual_sig = _base64url_decode(sig_b64)
-    if not hmac.compare_digest(expected_sig, actual_sig):
-        raise ValueError("Invalid JWT signature")
-    payload_json = _base64url_decode(payload_b64).decode('utf-8')
-    return json.loads(payload_json)
-
-# Load Firebase configuration from environment or config file
-FIREBASE_CONFIG = {}
+# Firebase configuration setup
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'firebase-applet-config.json')
+FIREBASE_CONFIG = {}
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, 'r') as f:
@@ -56,15 +34,18 @@ if os.path.exists(CONFIG_FILE):
     except Exception as e:
         print(f"Error loading firebase-applet-config.json: {e}")
 
-# Fallback config
 PROJECT_ID = FIREBASE_CONFIG.get("projectId") or os.getenv("FIREBASE_PROJECT_ID", "vex-app")
 API_KEY = FIREBASE_CONFIG.get("apiKey") or os.getenv("FIREBASE_API_KEY", "")
 AUTH_DOMAIN = FIREBASE_CONFIG.get("authDomain") or os.getenv("FIREBASE_AUTH_DOMAIN", f"{PROJECT_ID}.firebaseapp.com")
 FIRESTORE_DATABASE_ID = FIREBASE_CONFIG.get("firestoreDatabaseId") or os.getenv("FIRESTORE_DATABASE_ID", "(default)")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# Optional PyJWT import
+try:
+    import jwt
+except ImportError:
+    jwt = None
 
+# Optional Gemini SDK setup
 genai = None
 try:
     import google.generativeai as genai
@@ -73,7 +54,7 @@ try:
 except Exception as e:
     print(f"google.generativeai SDK setup notice: {e}")
 
-# Firebase Admin SDK setup
+# Firebase Admin SDK & Firestore client initialization
 firebase_admin_initialized = False
 db = None
 
@@ -94,7 +75,6 @@ try:
         
         if not firebase_admin_initialized:
             try:
-                # Initialize with default application credentials or project ID
                 firebase_admin.initialize_app(options={'projectId': PROJECT_ID})
                 firebase_admin_initialized = True
             except Exception as e:
@@ -103,7 +83,10 @@ try:
     if firebase_admin_initialized:
         try:
             if FIRESTORE_DATABASE_ID and FIRESTORE_DATABASE_ID != "(default)":
-                db = firestore.client(database=FIRESTORE_DATABASE_ID)
+                try:
+                    db = firestore.client(database=FIRESTORE_DATABASE_ID)
+                except TypeError:
+                    db = firestore.client()
             else:
                 db = firestore.client()
         except Exception as e:
@@ -112,7 +95,9 @@ try:
 except Exception as e:
     print(f"Firebase Admin SDK import error: {e}")
 
-# In-Memory Storage Fallback if Firestore is not connected
+# ==========================================
+# CONSOLIDATED IN-MEMORY DATA STORES (FALLBACK)
+# ==========================================
 IN_MEMORY_PROJECTS = [
     {
         "id": "prj_demo123456",
@@ -151,9 +136,26 @@ IN_MEMORY_KEYS = [
 
 IN_MEMORY_VERSIONS = []
 
+IN_MEMORY_KEEP_NOTES = [
+    {
+        "id": "keep_demo_01",
+        "name": "notes/keep_demo_01",
+        "title": "⚡ Project Vex Roadmap",
+        "body": {"text": {"text": "1. Integrate Google Keep API for seamless note sync.\n2. Add smooth typewriter animation to h1.\n3. Support 1-click import and export between Keep & Vex."}},
+        "createTime": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    },
+    {
+        "id": "keep_demo_02",
+        "name": "notes/keep_demo_02",
+        "title": "💡 Ideas for AI Workspace",
+        "body": {"text": {"text": "Explore sparse attention mechanisms and KV cache compression for ultra-fast context processing in Gemini 2.5."}},
+        "createTime": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }
+]
+
 
 # ==========================================
-# CORS & PREFLIGHT SUPPORT
+# CORS & PREFLIGHT MIDDLEWARE
 # ==========================================
 @app.before_request
 def handle_preflight():
@@ -173,99 +175,137 @@ def add_cors_headers(response):
 
 
 # ==========================================
-# AUTHENTICATION DECORATOR (ID Token OR Developer JWT API Key)
+# HELPER FUNCTIONS & AUTHENTICATION
 # ==========================================
+def _base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')
+
+def _base64url_decode(s: str) -> bytes:
+    padding = '=' * (4 - (len(s) % 4))
+    return base64.urlsafe_b64decode(s + padding)
+
+def encode_jwt_token(payload: dict, secret: str = API_SECRET_KEY) -> str:
+    if jwt:
+        return jwt.encode(payload, secret, algorithm="HS256")
+    header = {"alg": "HS256", "typ": "JWT"}
+    header_b64 = _base64url_encode(json.dumps(header, separators=(',', ':')).encode('utf-8'))
+    payload_b64 = _base64url_encode(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
+    signing_input = f"{header_b64}.{payload_b64}"
+    signature = hmac.new(secret.encode('utf-8'), signing_input.encode('utf-8'), hashlib.sha256).digest()
+    sig_b64 = _base64url_encode(signature)
+    return f"{signing_input}.{sig_b64}"
+
+def decode_jwt_token(token: str, secret: str = API_SECRET_KEY) -> dict:
+    if jwt:
+        return jwt.decode(token, secret, algorithms=["HS256"])
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise ValueError("Invalid JWT token format")
+    header_b64, payload_b64, sig_b64 = parts
+    signing_input = f"{header_b64}.{payload_b64}"
+    expected_sig = hmac.new(secret.encode('utf-8'), signing_input.encode('utf-8'), hashlib.sha256).digest()
+    actual_sig = _base64url_decode(sig_b64)
+    if not hmac.compare_digest(expected_sig, actual_sig):
+        raise ValueError("Invalid JWT signature")
+    payload_json = _base64url_decode(payload_b64).decode('utf-8')
+    return json.loads(payload_json)
+
+
 def require_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # 1. Check for API Key in headers or query params
-        api_key = request.headers.get("X-API-Key", "").strip()
         auth_header = request.headers.get("Authorization", "").strip()
+        x_api_key = request.headers.get("X-API-Key", "").strip()
 
-        if not api_key and auth_header.startswith("vex_live_"):
-            api_key = auth_header
-        elif not api_key and auth_header.startswith("Bearer vex_live_"):
-            api_key = auth_header[7:].strip()
-        elif not api_key:
-            api_key = request.args.get("api_key") or request.args.get("key") or ""
-
-        if api_key:
-            # Validate developer API key
-            key_user = None
-            if db:
-                try:
-                    docs = db.collection("api_keys").where("key", "==", api_key).where("is_active", "==", True).stream()
-                    for d in docs:
-                        key_user = d.to_dict().get("user_id") or d.to_dict().get("uid")
-                        break
-                except Exception as e:
-                    print(f"Error checking API key in Firestore: {e}")
-
-            if not key_user:
-                matched_key = next((k for k in IN_MEMORY_KEYS if (k.get("key") == api_key or k.get("token") == api_key) and k.get("is_active", True)), None)
-                if matched_key:
-                    key_user = matched_key.get("user_id") or matched_key.get("uid")
-
-            if key_user:
-                request.user_id = key_user
-                request.uid = key_user
-                return f(*args, **kwargs)
-            else:
-                return jsonify({"detail": "Unauthorized: Invalid Developer API Key"}), 401
-
-        # 2. Check for Bearer token (Firebase ID Token OR Developer JWT Token)
-        token = None
+        token = ""
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
+        elif auth_header.startswith("vex_live_"):
+            token = auth_header
+        elif x_api_key:
+            token = x_api_key
+        else:
+            token = request.args.get("api_key") or request.args.get("key") or request.args.get("token") or ""
 
         if not token:
-            token = request.args.get("token") or ""
+            return jsonify({"detail": "Missing Authorization Token or X-API-Key"}), 401
 
         request_uid = None
 
-        # Attempt A: Check if it's a Firebase ID Token
-        if token and token != "demo-token" and firebase_admin_initialized:
-            try:
-                from firebase_admin import auth as fb_auth
-                decoded_token = fb_auth.verify_id_token(token)
-                request_uid = decoded_token.get("uid")
-            except Exception:
-                pass # Not a valid Firebase token, move to Attempt B
+        # METHOD A: OpenAI-Style API Key (starts with vex_live_)
+        if token.startswith("vex_live_"):
+            if db:
+                try:
+                    key_doc = db.collection("api_keys").document(token).get()
+                    if key_doc.exists:
+                        kdata = key_doc.to_dict()
+                        if kdata.get("is_active", True):
+                            request_uid = kdata.get("uid") or kdata.get("user_id")
 
-        # Attempt B: Check if it's a Developer JWT Token
-        if not request_uid and token and token != "demo-token":
-            try:
-                jwt_payload = decode_jwt_token(token)
-                key_id = jwt_payload.get("key_id")
-                payload_uid = jwt_payload.get("uid")
+                    if not request_uid:
+                        docs = db.collection("api_keys").where("key", "==", token).where("is_active", "==", True).stream()
+                        for d in docs:
+                            kdata = d.to_dict()
+                            request_uid = kdata.get("uid") or kdata.get("user_id")
+                            break
+                except Exception as e:
+                    print(f"Error checking vex_live_ key in Firestore: {e}")
 
-                key_active = False
-                if db and key_id:
-                    try:
-                        doc = db.collection("api_keys").document(key_id).get()
-                        if doc.exists and doc.to_dict().get("is_active", True):
-                            key_active = True
-                    except Exception as e:
-                        print(f"Error validating JWT key in Firestore: {e}")
-                else:
-                    matched = next((k for k in IN_MEMORY_KEYS if k.get("id") == key_id and k.get("is_active", True)), None)
-                    if matched or not key_id:
-                        key_active = True
+            if not request_uid:
+                matched = next((k for k in IN_MEMORY_KEYS if (k.get("key") == token or k.get("id") == token) and k.get("is_active", True)), None)
+                if matched:
+                    request_uid = matched.get("uid") or matched.get("user_id")
 
-                if key_active and payload_uid:
-                    request_uid = payload_uid
-            except Exception:
-                pass
-
-        if not request_uid:
-            if token == "demo-token" or not token:
-                request_uid = "demo_user"
+            if request_uid:
+                request.user_id = request_uid
+                request.uid = request_uid
+                return f(*args, **kwargs)
             else:
-                return jsonify({"detail": "Unauthorized: Invalid or expired token"}), 401
+                return jsonify({"detail": "Unauthorized: Invalid or Revoked API Key"}), 401
 
-        request.user_id = request_uid
-        request.uid = request_uid
-        return f(*args, **kwargs)
+        # METHOD B: Firebase Web Session Token or JWT Token
+        if token == "demo-token":
+            request_uid = "demo_user"
+        else:
+            if firebase_admin_initialized:
+                try:
+                    from firebase_admin import auth as fb_auth
+                    decoded_token = fb_auth.verify_id_token(token)
+                    request_uid = decoded_token.get("uid")
+                except Exception:
+                    pass
+
+            if not request_uid:
+                try:
+                    jwt_payload = decode_jwt_token(token)
+                    key_id = jwt_payload.get("key_id")
+                    payload_uid = jwt_payload.get("uid")
+
+                    key_active = False
+                    if db and key_id:
+                        try:
+                            doc = db.collection("api_keys").document(key_id).get()
+                            if doc.exists and doc.to_dict().get("is_active", True):
+                                key_active = True
+                        except Exception as e:
+                            print(f"Error validating JWT key in Firestore: {e}")
+                    else:
+                        matched = next((k for k in IN_MEMORY_KEYS if k.get("id") == key_id and k.get("is_active", True)), None)
+                        if matched or not key_id:
+                            key_active = True
+
+                    if key_active and payload_uid:
+                        request_uid = payload_uid
+                except Exception:
+                    pass
+
+        if request_uid:
+            request.user_id = request_uid
+            request.uid = request_uid
+            return f(*args, **kwargs)
+        else:
+            return jsonify({"detail": "Unauthorized: Invalid or expired token"}), 401
+
     return decorated_function
 
 
@@ -290,7 +330,7 @@ def save_version_snapshot(note_id, title, content, user_id):
 
 
 # ==========================================
-# PAGE ROUTE HELPERS & TEMPLATES
+# PAGE ROUTES & ERROR HANDLERS
 # ==========================================
 def render_page(template_name):
     return render_template(
@@ -324,8 +364,33 @@ def status():
     return render_page("status.html")
 
 
+@app.errorhandler(404)
+def not_found_error(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"detail": "Resource not found"}), 404
+    return render_page("index.html"), 404
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"detail": f"Internal server error: {str(e)}"}), 500
+    return render_page("index.html"), 500
+
+@app.errorhandler(401)
+def unauthorized_error(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"detail": "Unauthorized"}), 401
+    return render_page("login.html"), 401
+
+@app.errorhandler(403)
+def forbidden_error(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"detail": "Forbidden"}), 403
+    return render_page("login.html"), 403
+
+
 # ==========================================
-# API HEALTH & STATUS
+# REST API ENDPOINTS
 # ==========================================
 @app.get("/api/health")
 def api_health():
@@ -337,9 +402,7 @@ def api_health():
     })
 
 
-# ==========================================
-# PROJECTS API
-# ==========================================
+# --- PROJECTS API ---
 @app.route("/api/v1/projects", methods=["GET", "POST"])
 @require_auth
 def projects_api():
@@ -389,7 +452,6 @@ def delete_project_api(project_id):
     if db:
         try:
             db.collection("projects").document(project_id).delete()
-            # Delete associated files
             files_ref = db.collection("files").where("project_id", "==", project_id).stream()
             for doc in files_ref:
                 doc.reference.delete()
@@ -402,9 +464,7 @@ def delete_project_api(project_id):
     return jsonify({"status": "deleted"})
 
 
-# ==========================================
-# FILES / NOTES API
-# ==========================================
+# --- FILES / NOTES API ---
 @app.route("/api/v1/projects/<project_id>/files", methods=["GET", "POST"])
 @require_auth
 def project_files_api(project_id):
@@ -473,7 +533,6 @@ def update_delete_file_api(project_id, file_id):
                 updated_doc = doc_ref.get()
                 if updated_doc.exists:
                     doc_data = updated_doc.to_dict()
-                    # Save version snapshot
                     save_version_snapshot(file_id, doc_data.get("title", "Untitled"), doc_data.get("content", ""), uid)
                     return jsonify({"file": doc_data})
             except Exception as e:
@@ -502,9 +561,7 @@ def update_delete_file_api(project_id, file_id):
         return jsonify({"status": "deleted"})
 
 
-# ==========================================
-# DIRECT NOTES CRUD API (/api/v1/notes)
-# ==========================================
+# --- DIRECT NOTES CRUD API (/api/v1/notes) ---
 @app.route("/api/v1/notes", methods=["GET", "POST"])
 @require_auth
 def notes_direct_api():
@@ -548,7 +605,6 @@ def notes_direct_api():
         
         project_id = data.get("project_id")
         if not project_id:
-            # Find user's first project or create default
             user_projs = [p for p in IN_MEMORY_PROJECTS if p["user_id"] == uid or uid == "demo_user"]
             if user_projs:
                 project_id = user_projs[0]["id"]
@@ -643,9 +699,7 @@ def note_detail_direct_api(note_id):
         return jsonify({"status": "deleted", "id": note_id})
 
 
-# ==========================================
-# NOTE VERSIONS API
-# ==========================================
+# --- NOTE VERSIONS API ---
 @app.route("/api/v1/notes/<note_id>/versions", methods=["GET"])
 @require_auth
 def get_note_versions_api(note_id):
@@ -714,9 +768,7 @@ def restore_note_version_api(note_id):
     return jsonify({"status": "restored", "title": patch_data["title"], "content": patch_data["content"]})
 
 
-# ==========================================
-# GLOBAL SEARCH API
-# ==========================================
+# --- GLOBAL SEARCH API ---
 @app.route("/api/v1/search", methods=["GET"])
 @require_auth
 def global_search_api():
@@ -815,9 +867,7 @@ def copy_file_api(project_id, file_id):
     return jsonify({"file": copy_file}), 201
 
 
-# ==========================================
-# DEVELOPER API KEYS
-# ==========================================
+# --- DEVELOPER API KEYS ---
 @app.route("/api/v1/developer/keys", methods=["GET", "POST"])
 @require_auth
 def developer_keys_api():
@@ -826,19 +876,43 @@ def developer_keys_api():
 
     if request.method == "GET":
         keys_list = []
+        seen_ids = set()
         if db:
             try:
                 docs_ref = db.collection("api_keys").where("user_id", "==", uid).stream()
                 for d in docs_ref:
                     kdata = d.to_dict()
-                    if kdata.get("is_active", True):
-                        keys_list.append(kdata)
-                return jsonify({"keys": keys_list})
+                    kid = kdata.get("id") or d.id
+                    if kdata.get("is_active", True) and kid not in seen_ids:
+                        seen_ids.add(kid)
+                        keys_list.append({
+                            "id": kid,
+                            "name": kdata.get("name", "Untitled API Key"),
+                            "key": kdata.get("key"),
+                            "key_preview": kdata.get("token_preview") or (f"{kdata.get('key')[:12]}...{kdata.get('key')[-4:]}" if kdata.get("key") else kid),
+                            "created_at": kdata.get("created_at")
+                        })
+                
+                docs_ref2 = db.collection("api_keys").where("uid", "==", uid).stream()
+                for d in docs_ref2:
+                    kdata = d.to_dict()
+                    kid = kdata.get("id") or d.id
+                    if kdata.get("is_active", True) and kid not in seen_ids:
+                        seen_ids.add(kid)
+                        keys_list.append({
+                            "id": kid,
+                            "name": kdata.get("name", "Untitled API Key"),
+                            "key": kdata.get("key"),
+                            "key_preview": kdata.get("token_preview") or (f"{kdata.get('key')[:12]}...{kdata.get('key')[-4:]}" if kdata.get("key") else kid),
+                            "created_at": kdata.get("created_at")
+                        })
+
+                return jsonify({"keys": keys_list}), 200
             except Exception as e:
                 print(f"Firestore GET keys failed: {e}")
 
-        active_keys = [k for k in IN_MEMORY_KEYS if k.get("user_id") == uid and k.get("is_active", True)]
-        return jsonify({"keys": active_keys})
+        active_keys = [k for k in IN_MEMORY_KEYS if (k.get("user_id") == uid or k.get("uid") == uid) and k.get("is_active", True)]
+        return jsonify({"keys": active_keys}), 200
 
     elif request.method == "POST":
         data = request.get_json() or {}
@@ -846,44 +920,48 @@ def developer_keys_api():
         key_id = f"key_{secrets.token_hex(6)}"
         now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-        # 1. Generate Long-Lived JWT Token for developer
+        random_hex = secrets.token_hex(16)
+        raw_key = f"vex_live_{random_hex}"
+
         payload = {
             "uid": uid,
             "key_id": key_id,
             "iat": datetime.datetime.now(datetime.timezone.utc).timestamp()
         }
-        api_token = encode_jwt_token(payload)
-        raw_key = f"vex_live_{secrets.token_hex(16)}"
+        jwt_token = encode_jwt_token(payload)
 
-        # 2. Key Metadata stored in Firestore / memory
         new_key_meta = {
             "id": key_id,
             "user_id": uid,
             "uid": uid,
             "name": key_name,
             "key": raw_key,
-            "token_preview": f"{api_token[:12]}...{api_token[-8:]}",
+            "token": raw_key,
+            "jwt_token": jwt_token,
+            "token_preview": f"{raw_key[:12]}...{raw_key[-4:]}",
             "is_active": True,
             "created_at": now_str
         }
 
         if db:
             try:
+                db.collection("api_keys").document(raw_key).set(new_key_meta)
                 db.collection("api_keys").document(key_id).set(new_key_meta)
             except Exception as e:
                 print(f"Firestore POST key failed: {e}")
 
         IN_MEMORY_KEYS.insert(0, new_key_meta)
         return jsonify({
+            "message": "API Key created successfully!",
+            "token": raw_key,
+            "key": raw_key,
             "key_id": key_id,
             "name": key_name,
-            "token": api_token,
-            "key": raw_key,
-            "message": "Please copy this token now. You will not be able to see it again."
+            "jwt_token": jwt_token
         }), 201
 
 
-@app.route("/api/v1/developer/keys/<key_id>", methods=["DELETE"])
+@app.route("/api/v1/developer/keys/<path:key_id>", methods=["DELETE"])
 @require_auth
 def delete_developer_key_api(key_id):
     global IN_MEMORY_KEYS
@@ -894,35 +972,26 @@ def delete_developer_key_api(key_id):
             doc = doc_ref.get()
             if doc.exists:
                 doc_data = doc.to_dict()
+                raw_k = doc_data.get("key")
+                kid = doc_data.get("id")
                 if doc_data.get("user_id") == uid or doc_data.get("uid") == uid or uid == "demo_user":
                     doc_ref.delete()
+                    if raw_k and raw_k != key_id:
+                        db.collection("api_keys").document(raw_k).delete()
+                    if kid and kid != key_id:
+                        db.collection("api_keys").document(kid).delete()
+            else:
+                docs = db.collection("api_keys").where("key", "==", key_id).stream()
+                for d in docs:
+                    d.reference.delete()
         except Exception as e:
             print(f"Firestore DELETE key failed: {e}")
 
-    IN_MEMORY_KEYS = [k for k in IN_MEMORY_KEYS if k["id"] != key_id]
-    return jsonify({"status": "revoked", "id": key_id})
+    IN_MEMORY_KEYS = [k for k in IN_MEMORY_KEYS if k.get("id") != key_id and k.get("key") != key_id]
+    return jsonify({"status": "revoked", "id": key_id}), 200
 
 
-# ==========================================
-# GOOGLE KEEP API PROXY ENDPOINTS
-# ==========================================
-IN_MEMORY_KEEP_NOTES = [
-    {
-        "id": "keep_demo_01",
-        "name": "notes/keep_demo_01",
-        "title": "⚡ Project Vex Roadmap",
-        "body": {"text": {"text": "1. Integrate Google Keep API for seamless note sync.\n2. Add smooth typewriter animation to h1.\n3. Support 1-click import and export between Keep & Vex."}},
-        "createTime": datetime.datetime.now(datetime.timezone.utc).isoformat()
-    },
-    {
-        "id": "keep_demo_02",
-        "name": "notes/keep_demo_02",
-        "title": "💡 Ideas for AI Workspace",
-        "body": {"text": {"text": "Explore sparse attention mechanisms and KV cache compression for ultra-fast context processing in Gemini 2.5."}},
-        "createTime": datetime.datetime.now(datetime.timezone.utc).isoformat()
-    }
-]
-
+# --- GOOGLE KEEP API PROXY ENDPOINTS ---
 @app.route("/api/v1/keep/notes", methods=["GET", "POST"])
 def google_keep_notes_proxy():
     global IN_MEMORY_KEEP_NOTES
@@ -943,7 +1012,6 @@ def google_keep_notes_proxy():
                     return jsonify(resp.json())
                 else:
                     print(f"Google Keep API GET returned {resp.status_code}: {resp.text}")
-                    # Return standard error details with fallback
                     return jsonify({
                         "error": "Google Keep API error",
                         "status_code": resp.status_code,
@@ -987,7 +1055,6 @@ def google_keep_notes_proxy():
             except Exception as e:
                 print(f"Error creating Keep note: {e}")
 
-        # Fallback in-memory creation for demo or offline
         new_keep = {
             "id": f"keep_demo_{secrets.token_hex(4)}",
             "name": f"notes/keep_demo_{secrets.token_hex(4)}",
@@ -1024,9 +1091,7 @@ def delete_keep_note_proxy(note_id):
     return jsonify({"status": "deleted"})
 
 
-# ==========================================
-# GEMINI AI CHAT ENDPOINT
-# ==========================================
+# --- GEMINI AI CHAT ENDPOINT ---
 @app.route("/api/v1/ai/chat", methods=["POST"])
 def ai_chat_api():
     data = request.get_json() or {}
@@ -1046,7 +1111,6 @@ def ai_chat_api():
         if context:
             system_instruction += f"\n\nCurrent note context:\n{context}"
 
-        # Try google.generativeai SDK if available
         if genai and hasattr(genai, "GenerativeModel"):
             try:
                 model_name = GEMINI_MODEL if GEMINI_MODEL else "gemini-1.5-flash"
@@ -1086,5 +1150,9 @@ def ai_chat_api():
         return jsonify({"detail": f"Error communicating with Gemini AI: {str(e)}"}), 500
 
 
+# ==========================================
+# MAIN ENTRYPOINT
+# ==========================================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)), debug=True)
+    port = int(os.environ.get("PORT", 3000))
+    app.run(host="0.0.0.0", port=port, debug=True)

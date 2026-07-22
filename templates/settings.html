@@ -229,12 +229,16 @@
             } catch(e) {}
         }
 
+        let isAuthProcessed = false;
+
         window.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('vex_demo_mode');
             updateThemeUI();
             if (auth) {
                 auth.onAuthStateChanged(user => {
+                    if (isAuthProcessed) return;
                     if (user) {
+                        isAuthProcessed = true;
                         document.getElementById('setting-display-name').value = user.displayName || '';
                         document.getElementById('setting-email').value = user.email || '';
                         loadDeveloperKeys();

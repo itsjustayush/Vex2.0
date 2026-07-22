@@ -1079,6 +1079,8 @@
             }
         }
 
+        let isAuthProcessed = false;
+
         // Initialize App & Auth Guard
         window.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('vex_demo_mode');
@@ -1104,7 +1106,9 @@
                 });
 
                 auth.onAuthStateChanged(user => {
+                    if (isAuthProcessed) return;
                     if (user) {
+                        isAuthProcessed = true;
                         currentUser = user;
                         document.getElementById('user-display-name').innerText = user.displayName || 'User';
                         document.getElementById('user-email').innerText = user.email || '';

@@ -1,21 +1,9 @@
 {
-  "name": "vex",
+  "name": "vex-workspace",
   "version": "1.0.0",
-  "type": "module",
+  "private": true,
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs"
-  },
-  "dependencies": {
-    "@google/genai": "*",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.10.10",
-    "esbuild": "^0.24.2",
-    "tsx": "^4.19.2"
+    "dev": "python3 app.py",
+    "start": "python3 app.py"
   }
 }
