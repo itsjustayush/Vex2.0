@@ -9,6 +9,44 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
 
+    <!-- Theme Pre-Init Script (Prevents flash of incorrect theme) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('vex_theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+            } else {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+            }
+        })();
+    </script>
+
+    <style>
+        :root {
+            --background: #f8fafc;
+            --surface-low: #ffffff;
+            --surface-high: #f1f5f9;
+            --primary: #0d9488;
+            --primary-hover: #0f766e;
+            --on-surface: #0f172a;
+            --slate-border: #e2e8f0;
+            --slate-text: #64748b;
+        }
+
+        html.dark {
+            --background: #131316;
+            --surface-low: #1b1b1e;
+            --surface-high: #2a2a2d;
+            --primary: #63dac3;
+            --primary-hover: #42cbb1;
+            --on-surface: #e4e1e6;
+            --slate-border: #27272A;
+            --slate-text: #8e8e93;
+        }
+    </style>
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -17,14 +55,14 @@
             theme: {
                 extend: {
                     colors: {
-                        "background": "#131316",
-                        "surface-low": "#1b1b1e",
-                        "surface-high": "#2a2a2d",
-                        "primary": "#63dac3",
-                        "primary-hover": "#42cbb1",
-                        "on-surface": "#e4e1e6",
-                        "slate-border": "#27272A",
-                        "slate-text": "#8e8e93"
+                        "background": "var(--background)",
+                        "surface-low": "var(--surface-low)",
+                        "surface-high": "var(--surface-high)",
+                        "primary": "var(--primary)",
+                        "primary-hover": "var(--primary-hover)",
+                        "on-surface": "var(--on-surface)",
+                        "slate-border": "var(--slate-border)",
+                        "slate-text": "var(--slate-text)"
                     },
                     fontFamily: {
                         sans: ["Inter", "sans-serif"],
@@ -343,6 +381,13 @@
                     <span class="material-symbols-outlined text-lg">description</span>
                     <span>Documentation</span>
                 </a>
+                <button onclick="toggleTheme()" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-slate-text hover:text-on-surface hover:bg-surface-high/50">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-lg text-primary theme-toggle-icon">light_mode</span>
+                        <span>Theme</span>
+                    </div>
+                    <span class="theme-toggle-text text-[10px] font-mono bg-surface-high border border-slate-border px-2 py-0.5 rounded-md text-on-surface">Dark</span>
+                </button>
             </nav>
         </div>
 
@@ -382,6 +427,10 @@
                     <span class="material-symbols-outlined text-base text-primary">search</span>
                     <span class="hidden sm:inline font-medium">Search...</span>
                     <kbd class="hidden md:inline bg-surface-low text-[10px] text-slate-text px-1.5 py-0.5 rounded border border-slate-border font-mono">Ctrl+K</kbd>
+                </button>
+                <button onclick="toggleTheme()" title="Toggle Light / Dark Mode" class="flex items-center gap-1.5 text-xs text-slate-text hover:text-on-surface bg-surface-high border border-slate-border px-3 py-1.5 rounded-xl transition-all hover:border-primary/50">
+                    <span class="material-symbols-outlined text-base text-primary theme-toggle-icon">light_mode</span>
+                    <span class="hidden sm:inline font-medium theme-toggle-text">Dark</span>
                 </button>
                 <button onclick="toggleRightSidebar()" title="Toggle Calendar & AI Assistant" class="flex items-center gap-2 text-xs text-slate-text hover:text-on-surface bg-surface-high border border-slate-border px-3 py-1.5 rounded-xl transition-all">
                     <span class="material-symbols-outlined text-base text-primary">auto_awesome</span>
@@ -941,6 +990,40 @@
     <!-- JAVASCRIPT APP STATE & LOGIC -->
     <!-- ========================================== -->
     <script>
+        // ==========================================
+        // LIGHT / DARK THEME TOGGLE LOGIC
+        // ==========================================
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const newTheme = isDark ? 'light' : 'dark';
+
+            if (newTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+            } else {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+            }
+
+            localStorage.setItem('vex_theme', newTheme);
+            updateThemeToggleUI(newTheme);
+            if (typeof showToast === 'function') {
+                showToast(`Switched to ${newTheme === 'dark' ? 'Dark' : 'Light'} Mode`, 'info');
+            }
+        }
+
+        function updateThemeToggleUI(theme) {
+            const isDark = (theme || localStorage.getItem('vex_theme') || 'dark') === 'dark';
+
+            document.querySelectorAll('.theme-toggle-icon').forEach(icon => {
+                icon.innerText = isDark ? 'light_mode' : 'dark_mode';
+            });
+
+            document.querySelectorAll('.theme-toggle-text').forEach(text => {
+                text.innerText = isDark ? 'Dark' : 'Light';
+            });
+        }
+
         // Global App State
         let currentUser = null;
         let userProjects = [];
@@ -999,6 +1082,7 @@
         // Initialize App & Auth Guard
         window.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('vex_demo_mode');
+            updateThemeToggleUI();
 
             if (auth) {
                 auth.getRedirectResult().then(result => {

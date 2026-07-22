@@ -9,6 +9,44 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
 
+    <!-- Theme Pre-Init Script -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('vex_theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+            } else {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+            }
+        })();
+    </script>
+
+    <style>
+        :root {
+            --background: #f8fafc;
+            --surface-low: #ffffff;
+            --surface-high: #f1f5f9;
+            --primary: #0d9488;
+            --primary-hover: #0f766e;
+            --on-surface: #0f172a;
+            --slate-border: #e2e8f0;
+            --slate-text: #64748b;
+        }
+
+        html.dark {
+            --background: #131316;
+            --surface-low: #1b1b1e;
+            --surface-high: #2a2a2d;
+            --primary: #63dac3;
+            --primary-hover: #42cbb1;
+            --on-surface: #e4e1e6;
+            --slate-border: #27272A;
+            --slate-text: #8e8e93;
+        }
+    </style>
+
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -17,14 +55,14 @@
             theme: {
                 extend: {
                     colors: {
-                        "background": "#131316",
-                        "surface-low": "#1b1b1e",
-                        "surface-high": "#2a2a2d",
-                        "primary": "#63dac3",
-                        "primary-hover": "#42cbb1",
-                        "on-surface": "#e4e1e6",
-                        "slate-border": "#27272A",
-                        "slate-text": "#8e8e93"
+                        "background": "var(--background)",
+                        "surface-low": "var(--surface-low)",
+                        "surface-high": "var(--surface-high)",
+                        "primary": "var(--primary)",
+                        "primary-hover": "var(--primary-hover)",
+                        "on-surface": "var(--on-surface)",
+                        "slate-border": "var(--slate-border)",
+                        "slate-text": "var(--slate-text)"
                     },
                     fontFamily: {
                         sans: ["Inter", "sans-serif"]

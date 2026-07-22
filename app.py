@@ -2,6 +2,9 @@ import os
 import json
 import secrets
 import datetime
+import hmac
+import hashlib
+import base64
 from functools import wraps
 from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
@@ -10,6 +13,38 @@ import requests
 load_dotenv()
 
 app = Flask(__name__, template_folder='templates')
+
+# Secret Key for signing Developer JWT Tokens
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", "vex-super-secret-jwt-key-change-in-prod")
+
+def _base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')
+
+def _base64url_decode(s: str) -> bytes:
+    padding = '=' * (4 - (len(s) % 4))
+    return base64.urlsafe_b64decode(s + padding)
+
+def encode_jwt_token(payload: dict, secret: str = API_SECRET_KEY) -> str:
+    header = {"alg": "HS256", "typ": "JWT"}
+    header_b64 = _base64url_encode(json.dumps(header, separators=(',', ':')).encode('utf-8'))
+    payload_b64 = _base64url_encode(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
+    signing_input = f"{header_b64}.{payload_b64}"
+    signature = hmac.new(secret.encode('utf-8'), signing_input.encode('utf-8'), hashlib.sha256).digest()
+    sig_b64 = _base64url_encode(signature)
+    return f"{signing_input}.{sig_b64}"
+
+def decode_jwt_token(token: str, secret: str = API_SECRET_KEY) -> dict:
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise ValueError("Invalid JWT token format")
+    header_b64, payload_b64, sig_b64 = parts
+    signing_input = f"{header_b64}.{payload_b64}"
+    expected_sig = hmac.new(secret.encode('utf-8'), signing_input.encode('utf-8'), hashlib.sha256).digest()
+    actual_sig = _base64url_decode(sig_b64)
+    if not hmac.compare_digest(expected_sig, actual_sig):
+        raise ValueError("Invalid JWT signature")
+    payload_json = _base64url_decode(payload_b64).decode('utf-8')
+    return json.loads(payload_json)
 
 # Load Firebase configuration from environment or config file
 FIREBASE_CONFIG = {}
@@ -138,7 +173,7 @@ def add_cors_headers(response):
 
 
 # ==========================================
-# AUTHENTICATION DECORATOR (ID Token OR API Key)
+# AUTHENTICATION DECORATOR (ID Token OR Developer JWT API Key)
 # ==========================================
 def require_auth(f):
     @wraps(f)
@@ -161,40 +196,75 @@ def require_auth(f):
                 try:
                     docs = db.collection("api_keys").where("key", "==", api_key).where("is_active", "==", True).stream()
                     for d in docs:
-                        key_user = d.to_dict().get("user_id")
+                        key_user = d.to_dict().get("user_id") or d.to_dict().get("uid")
                         break
                 except Exception as e:
                     print(f"Error checking API key in Firestore: {e}")
 
             if not key_user:
-                matched_key = next((k for k in IN_MEMORY_KEYS if k["key"] == api_key and k.get("is_active")), None)
+                matched_key = next((k for k in IN_MEMORY_KEYS if (k.get("key") == api_key or k.get("token") == api_key) and k.get("is_active", True)), None)
                 if matched_key:
-                    key_user = matched_key["user_id"]
+                    key_user = matched_key.get("user_id") or matched_key.get("uid")
 
             if key_user:
                 request.user_id = key_user
+                request.uid = key_user
                 return f(*args, **kwargs)
             else:
                 return jsonify({"detail": "Unauthorized: Invalid Developer API Key"}), 401
 
-        # 2. Check for Firebase ID Token
+        # 2. Check for Bearer token (Firebase ID Token OR Developer JWT Token)
         token = None
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
 
-        user_id = "demo_user"
-        
+        if not token:
+            token = request.args.get("token") or ""
+
+        request_uid = None
+
+        # Attempt A: Check if it's a Firebase ID Token
         if token and token != "demo-token" and firebase_admin_initialized:
             try:
-                from firebase_admin import auth
-                decoded_token = auth.verify_id_token(token)
-                user_id = decoded_token.get("uid", "demo_user")
-            except Exception as e:
-                print(f"Token verification error: {e}")
-                if not token:
-                    return jsonify({"detail": "Unauthorized: Invalid or expired ID token"}), 401
+                from firebase_admin import auth as fb_auth
+                decoded_token = fb_auth.verify_id_token(token)
+                request_uid = decoded_token.get("uid")
+            except Exception:
+                pass # Not a valid Firebase token, move to Attempt B
 
-        request.user_id = user_id
+        # Attempt B: Check if it's a Developer JWT Token
+        if not request_uid and token and token != "demo-token":
+            try:
+                jwt_payload = decode_jwt_token(token)
+                key_id = jwt_payload.get("key_id")
+                payload_uid = jwt_payload.get("uid")
+
+                key_active = False
+                if db and key_id:
+                    try:
+                        doc = db.collection("api_keys").document(key_id).get()
+                        if doc.exists and doc.to_dict().get("is_active", True):
+                            key_active = True
+                    except Exception as e:
+                        print(f"Error validating JWT key in Firestore: {e}")
+                else:
+                    matched = next((k for k in IN_MEMORY_KEYS if k.get("id") == key_id and k.get("is_active", True)), None)
+                    if matched or not key_id:
+                        key_active = True
+
+                if key_active and payload_uid:
+                    request_uid = payload_uid
+            except Exception:
+                pass
+
+        if not request_uid:
+            if token == "demo-token" or not token:
+                request_uid = "demo_user"
+            else:
+                return jsonify({"detail": "Unauthorized: Invalid or expired token"}), 401
+
+        request.user_id = request_uid
+        request.uid = request_uid
         return f(*args, **kwargs)
     return decorated_function
 
@@ -755,50 +825,82 @@ def developer_keys_api():
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "GET":
+        keys_list = []
         if db:
             try:
                 docs_ref = db.collection("api_keys").where("user_id", "==", uid).stream()
-                keys_list = [d.to_dict() for d in docs_ref]
+                for d in docs_ref:
+                    kdata = d.to_dict()
+                    if kdata.get("is_active", True):
+                        keys_list.append(kdata)
                 return jsonify({"keys": keys_list})
             except Exception as e:
                 print(f"Firestore GET keys failed: {e}")
 
-        return jsonify({"keys": IN_MEMORY_KEYS})
+        active_keys = [k for k in IN_MEMORY_KEYS if k.get("user_id") == uid and k.get("is_active", True)]
+        return jsonify({"keys": active_keys})
 
     elif request.method == "POST":
         data = request.get_json() or {}
-        new_key = {
-            "id": f"key_{secrets.token_hex(4)}",
+        key_name = data.get("name", "Untitled API Key").strip() or "Untitled API Key"
+        key_id = f"key_{secrets.token_hex(6)}"
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        # 1. Generate Long-Lived JWT Token for developer
+        payload = {
+            "uid": uid,
+            "key_id": key_id,
+            "iat": datetime.datetime.now(datetime.timezone.utc).timestamp()
+        }
+        api_token = encode_jwt_token(payload)
+        raw_key = f"vex_live_{secrets.token_hex(16)}"
+
+        # 2. Key Metadata stored in Firestore / memory
+        new_key_meta = {
+            "id": key_id,
             "user_id": uid,
-            "name": data.get("name", "Untitled Key").strip() or "Untitled Key",
-            "key": f"vex_live_{secrets.token_hex(16)}",
+            "uid": uid,
+            "name": key_name,
+            "key": raw_key,
+            "token_preview": f"{api_token[:12]}...{api_token[-8:]}",
             "is_active": True,
-            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            "created_at": now_str
         }
 
         if db:
             try:
-                db.collection("api_keys").document(new_key["id"]).set(new_key)
-                return jsonify({"key": new_key}), 201
+                db.collection("api_keys").document(key_id).set(new_key_meta)
             except Exception as e:
                 print(f"Firestore POST key failed: {e}")
 
-        IN_MEMORY_KEYS.insert(0, new_key)
-        return jsonify({"key": new_key}), 201
+        IN_MEMORY_KEYS.insert(0, new_key_meta)
+        return jsonify({
+            "key_id": key_id,
+            "name": key_name,
+            "token": api_token,
+            "key": raw_key,
+            "message": "Please copy this token now. You will not be able to see it again."
+        }), 201
 
 
 @app.route("/api/v1/developer/keys/<key_id>", methods=["DELETE"])
 @require_auth
 def delete_developer_key_api(key_id):
     global IN_MEMORY_KEYS
+    uid = getattr(request, 'user_id', 'demo_user')
     if db:
         try:
-            db.collection("api_keys").document(key_id).delete()
+            doc_ref = db.collection("api_keys").document(key_id)
+            doc = doc_ref.get()
+            if doc.exists:
+                doc_data = doc.to_dict()
+                if doc_data.get("user_id") == uid or doc_data.get("uid") == uid or uid == "demo_user":
+                    doc_ref.delete()
         except Exception as e:
             print(f"Firestore DELETE key failed: {e}")
 
     IN_MEMORY_KEYS = [k for k in IN_MEMORY_KEYS if k["id"] != key_id]
-    return jsonify({"status": "deleted"})
+    return jsonify({"status": "revoked", "id": key_id})
 
 
 # ==========================================
