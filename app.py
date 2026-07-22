@@ -30,6 +30,14 @@ FIRESTORE_DATABASE_ID = FIREBASE_CONFIG.get("firestoreDatabaseId") or os.getenv(
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
+genai = None
+try:
+    import google.generativeai as genai
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+except Exception as e:
+    print(f"google.generativeai SDK setup notice: {e}")
+
 # Firebase Admin SDK setup
 firebase_admin_initialized = False
 db = None
@@ -304,6 +312,7 @@ def projects_api():
 @app.route("/api/v1/projects/<project_id>", methods=["DELETE"])
 @require_auth
 def delete_project_api(project_id):
+    global IN_MEMORY_PROJECTS, IN_MEMORY_FILES
     uid = getattr(request, 'user_id', 'demo_user')
 
     if db:
@@ -316,7 +325,6 @@ def delete_project_api(project_id):
         except Exception as e:
             print(f"Firestore DELETE project failed: {e}")
 
-    global IN_MEMORY_PROJECTS, IN_MEMORY_FILES
     IN_MEMORY_PROJECTS = [p for p in IN_MEMORY_PROJECTS if p["id"] != project_id]
     IN_MEMORY_FILES = [f for f in IN_MEMORY_FILES if f.get("project_id") != project_id]
 
@@ -374,6 +382,7 @@ def project_files_api(project_id):
 @app.route("/api/v1/projects/<project_id>/files/<file_id>", methods=["PUT", "DELETE"])
 @require_auth
 def update_delete_file_api(project_id, file_id):
+    global IN_MEMORY_FILES
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "PUT":
@@ -417,7 +426,6 @@ def update_delete_file_api(project_id, file_id):
             except Exception as e:
                 print(f"Firestore DELETE file failed: {e}")
 
-        global IN_MEMORY_FILES
         IN_MEMORY_FILES = [f for f in IN_MEMORY_FILES if not (f["id"] == file_id and f.get("project_id") == project_id)]
         return jsonify({"status": "deleted"})
 
@@ -503,6 +511,7 @@ def notes_direct_api():
 @app.route("/api/v1/notes/<note_id>", methods=["GET", "PUT", "DELETE"])
 @require_auth
 def note_detail_direct_api(note_id):
+    global IN_MEMORY_FILES
     uid = getattr(request, 'user_id', 'demo_user')
 
     if request.method == "GET":
@@ -557,7 +566,6 @@ def note_detail_direct_api(note_id):
             except Exception as e:
                 print(f"Firestore DELETE note error: {e}")
 
-        global IN_MEMORY_FILES
         IN_MEMORY_FILES = [f for f in IN_MEMORY_FILES if f["id"] != note_id]
         return jsonify({"status": "deleted", "id": note_id})
 
@@ -774,13 +782,13 @@ def developer_keys_api():
 @app.route("/api/v1/developer/keys/<key_id>", methods=["DELETE"])
 @require_auth
 def delete_developer_key_api(key_id):
+    global IN_MEMORY_KEYS
     if db:
         try:
             db.collection("api_keys").document(key_id).delete()
         except Exception as e:
             print(f"Firestore DELETE key failed: {e}")
 
-    global IN_MEMORY_KEYS
     IN_MEMORY_KEYS = [k for k in IN_MEMORY_KEYS if k["id"] != key_id]
     return jsonify({"status": "deleted"})
 
@@ -882,6 +890,7 @@ def google_keep_notes_proxy():
 
 @app.route("/api/v1/keep/notes/<path:note_id>", methods=["DELETE"])
 def delete_keep_note_proxy(note_id):
+    global IN_MEMORY_KEEP_NOTES
     auth_header = request.headers.get("Authorization")
     token = None
     if auth_header and auth_header.startswith("Bearer "):
@@ -900,7 +909,6 @@ def delete_keep_note_proxy(note_id):
         except Exception as e:
             print(f"Keep note delete error: {e}")
 
-    global IN_MEMORY_KEEP_NOTES
     IN_MEMORY_KEEP_NOTES = [n for n in IN_MEMORY_KEEP_NOTES if note_id not in n.get("name", "") and note_id not in n.get("id", "")]
     return jsonify({"status": "deleted"})
 
@@ -927,6 +935,21 @@ def ai_chat_api():
         if context:
             system_instruction += f"\n\nCurrent note context:\n{context}"
 
+        # Try google.generativeai SDK if available
+        if genai and hasattr(genai, "GenerativeModel"):
+            try:
+                model_name = GEMINI_MODEL if GEMINI_MODEL else "gemini-1.5-flash"
+                model = genai.GenerativeModel(
+                    model_name=model_name,
+                    system_instruction=system_instruction
+                )
+                response = model.generate_content(message)
+                if response and hasattr(response, "text") and response.text:
+                    return jsonify({"reply": response.text})
+            except Exception as sdk_err:
+                print(f"google-generativeai SDK call notice, falling back to REST: {sdk_err}")
+
+        # REST API fallback
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "systemInstruction": {
