@@ -99,7 +99,6 @@
     <script>
         const firebaseConfig = {{ firebase_json | safe if firebase_json else '{}' }};
         let auth = null;
-        let isDemoMode = localStorage.getItem('vex_demo_mode') === 'true';
 
         if (firebaseConfig && firebaseConfig.apiKey) {
             try {
@@ -109,11 +108,8 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            if (isDemoMode) {
-                document.getElementById('setting-display-name').value = 'Guest User';
-                document.getElementById('setting-email').value = 'guest@vex.local';
-                loadDeveloperKeys();
-            } else if (auth) {
+            localStorage.removeItem('vex_demo_mode');
+            if (auth) {
                 auth.onAuthStateChanged(user => {
                     if (user) {
                         document.getElementById('setting-display-name').value = user.displayName || '';
@@ -129,7 +125,6 @@
         });
 
         async function getAuthToken() {
-            if (isDemoMode) return 'demo-token';
             if (auth && auth.currentUser) return await auth.currentUser.getIdToken();
             return 'demo-token';
         }
@@ -201,11 +196,6 @@
             const newName = document.getElementById('setting-display-name').value.trim();
             if (!newName) {
                 alert('Display name cannot be empty.');
-                return;
-            }
-
-            if (isDemoMode) {
-                alert('Display name updated to: ' + newName);
                 return;
             }
 

@@ -609,7 +609,6 @@
     <script>
         // Global App State
         let currentUser = null;
-        let isDemoMode = false;
         let userProjects = [];
         let userFiles = [];
         let activeProjectId = null;
@@ -634,14 +633,19 @@
 
         // Initialize App & Auth Guard
         window.addEventListener('DOMContentLoaded', () => {
-            isDemoMode = localStorage.getItem('vex_demo_mode') === 'true';
+            localStorage.removeItem('vex_demo_mode');
 
-            if (isDemoMode) {
-                document.getElementById('demo-badge').classList.remove('hidden');
-                document.getElementById('user-display-name').innerText = 'Guest User';
-                document.getElementById('user-email').innerText = 'guest@vex.local';
-                initApp();
-            } else if (auth) {
+            if (auth) {
+                auth.getRedirectResult().then(result => {
+                    if (result && result.credential && result.credential.accessToken) {
+                        keepOAuthAccessToken = result.credential.accessToken;
+                        showToast('Google Keep connected via redirect!', 'success');
+                        fetchGoogleKeepNotes();
+                    }
+                }).catch(err => {
+                    console.warn('Redirect result notice:', err);
+                });
+
                 auth.onAuthStateChanged(user => {
                     if (user) {
                         currentUser = user;
@@ -658,19 +662,28 @@
                     }
                 });
             } else {
-                // If no firebase and no demo mode, default to demo mode
-                localStorage.setItem('vex_demo_mode', 'true');
-                isDemoMode = true;
-                initApp();
+                window.location.href = '/login';
             }
 
             renderCalendar();
             initTypewriterAnimation();
         });
 
+        function logout() {
+            localStorage.removeItem('vex_demo_mode');
+            if (auth) {
+                auth.signOut().then(() => { window.location.href = '/login'; }).catch(() => { window.location.href = '/login'; });
+            } else {
+                window.location.href = '/login';
+            }
+        }
+
         async function getAuthToken() {
-            if (isDemoMode) return 'demo-token';
-            if (currentUser) return await currentUser.getIdToken();
+            if (currentUser) {
+                try {
+                    return await currentUser.getIdToken();
+                } catch(e) {}
+            }
             return 'demo-token';
         }
 
@@ -865,7 +878,7 @@
 
         async function loginGoogleKeepOAuth() {
             if (!auth) {
-                showToast('Firebase Auth is offline. Using Guest Keep mode.', 'info');
+                showToast('Firebase Auth is offline.', 'error');
                 return;
             }
 
@@ -885,7 +898,25 @@
                 }
             } catch (err) {
                 console.error('Keep OAuth Error:', err);
-                showToast('Google OAuth: ' + (err.message || 'Cancelled or unavailable'), 'warning');
+                const host = window.location.hostname;
+                const errCode = err && err.code ? err.code : '';
+                const errStr = err && err.message ? err.message : '';
+                if (errCode === 'auth/network-request-failed' || errCode === 'auth/popup-blocked') {
+                    try {
+                        showToast('Popup blocked or network failed. Redirecting for Google Keep...', 'info');
+                        const provider = new firebase.auth.GoogleAuthProvider();
+                        provider.addScope('https://www.googleapis.com/auth/keep');
+                        await auth.signInWithRedirect(provider);
+                        return;
+                    } catch(re) {
+                        console.error('Redirect keep auth failed:', re);
+                    }
+                }
+                if (errCode === 'auth/unauthorized-domain' || errStr.includes('unauthorized-domain')) {
+                    alert(`Firebase Error: Unauthorized Domain\n\nDomain "${host}" is not authorized in your Firebase console.\n\nTo fix:\n1. Open Firebase Console\n2. Go to Authentication -> Settings -> Authorized domains\n3. Click "Add domain" and add: ${host}`);
+                } else {
+                    showToast('Google OAuth: ' + (errStr || 'Cancelled or unavailable'), 'warning');
+                }
             }
         }
 
@@ -913,8 +944,8 @@
                             badge.innerText = 'Connected Live';
                             badge.className = 'text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md font-mono';
                         } else {
-                            badge.innerText = 'Guest / Demo Mode';
-                            badge.className = 'text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-md font-mono';
+                            badge.innerText = 'Standard Storage';
+                            badge.className = 'text-[10px] bg-primary/10 text-primary border border-primary/30 px-2 py-0.5 rounded-md font-mono';
                         }
                     }
                 } else {
