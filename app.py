@@ -40,8 +40,9 @@ API_KEY = FIREBASE_CONFIG.get("apiKey") or os.getenv("FIREBASE_API_KEY", "")
 AUTH_DOMAIN = FIREBASE_CONFIG.get("authDomain") or os.getenv("FIREBASE_AUTH_DOMAIN", f"{PROJECT_ID}.firebaseapp.com")
 FIRESTORE_DATABASE_ID = FIREBASE_CONFIG.get("firestoreDatabaseId") or os.getenv("FIRESTORE_DATABASE_ID", "(default)")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qdsdjgfvimuvdujxouab.supabase.co").rstrip("/")
+SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_A7yz0fKFeFAS1ChBcF0TUg_pcPE_hh1")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+SUPABASE_ENABLED = bool(SUPABASE_URL and (SUPABASE_PUBLISHABLE_KEY or SUPABASE_SERVICE_ROLE_KEY))
 
 # Optional PyJWT import
 try:
@@ -432,8 +433,8 @@ def render_page(template_name):
         template_name,
         firebase_config=FIREBASE_CONFIG,
         firebase_json=json.dumps(FIREBASE_CONFIG),
-        supabase_config={"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else ""},
-        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else ""})
+        supabase_config={"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""},
+        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""})
     )
 
 @app.route("/")

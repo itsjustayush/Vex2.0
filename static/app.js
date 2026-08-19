@@ -106,8 +106,63 @@
     const token = await firebaseUser.getIdToken();
     const response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || `Supabase sync failed (${response.status}).`);
+    if (!response.ok) throw new Error(data.detail || `Supabase bridge failed (${response.status}).`);
     return data;
+  }
+
+  async function supabaseDirectRequest(method, table, query = "", payload = null, prefer = "return=minimal") {
+    if (!supabaseConfig.enabled || !supabaseConfig.url || !supabaseConfig.publishableKey || !firebaseUser) return null;
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`${supabaseConfig.url}/rest/v1/${table}${query}`, { method, headers:{ apikey:supabaseConfig.publishableKey, Authorization:`Bearer ${token}`, "Content-Type":"application/json", Prefer:prefer }, body:payload == null ? undefined : JSON.stringify(payload) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || data.error_description || `Supabase REST ${table} failed (${response.status}).`);
+    return data;
+  }
+
+  function supabaseUserFilter(uid, extra = "") {
+    return `?user_id=eq.${encodeURIComponent(uid)}${extra ? `&${extra}` : ""}`;
+  }
+
+  async function hydrateSupabaseDirect() {
+    const uid = firebaseUser.uid;
+    const [pages, boards, items, settingsRows, typingRows] = await Promise.all([
+      supabaseDirectRequest("GET", "vex_pages", `${supabaseUserFilter(uid, "select=*&order=updated_at.desc&limit=100")}`),
+      supabaseDirectRequest("GET", "vex_boards", `${supabaseUserFilter(uid, "select=*&order=updated_at.desc&limit=50")}`),
+      supabaseDirectRequest("GET", "vex_board_items", `${supabaseUserFilter(uid, "select=*&limit=5000")}`),
+      supabaseDirectRequest("GET", "vex_settings", `${supabaseUserFilter(uid, "select=preferences&limit=1")}`),
+      supabaseDirectRequest("GET", "vex_typing_stats", `${supabaseUserFilter(uid, "select=stats&limit=1")}`)
+    ]);
+    return { enabled:true, pages:pages || [], boards:boards || [], items:items || [], settings:settingsRows?.[0]?.preferences || {}, typing:typingRows?.[0]?.stats || {} };
+  }
+
+  async function syncSupabaseDirect(payload) {
+    const uid = firebaseUser.uid;
+    const calls = [];
+    if (payload.pages) calls.push(supabaseDirectRequest("POST", "vex_pages", "?on_conflict=user_id,id", payload.pages, "resolution=merge-duplicates,return=minimal"));
+    if (payload.settings) calls.push(supabaseDirectRequest("POST", "vex_settings", "?on_conflict=user_id", { user_id:uid, preferences:payload.settings, updated_at:new Date().toISOString() }, "resolution=merge-duplicates,return=minimal"));
+    if (payload.typing) calls.push(supabaseDirectRequest("POST", "vex_typing_stats", "?on_conflict=user_id", { user_id:uid, stats:payload.typing, updated_at:new Date().toISOString() }, "resolution=merge-duplicates,return=minimal"));
+    await Promise.all(calls);
+    if (payload.boards) {
+      await supabaseDirectRequest("POST", "vex_boards", "?on_conflict=user_id,id", payload.boards.map(board => ({ ...board, user_id:uid, item_count:(payload.board_items?.[board.id] || []).length })), "resolution=merge-duplicates,return=minimal");
+      await Promise.all(payload.boards.map(async board => {
+        await supabaseDirectRequest("DELETE", "vex_board_items", `?user_id=eq.${encodeURIComponent(uid)}&board_id=eq.${encodeURIComponent(board.id)}`);
+        const items = payload.board_items?.[board.id] || [];
+        if (items.length) await supabaseDirectRequest("POST", "vex_board_items", "?on_conflict=user_id,board_id,id", items.map(item => ({ id:String(item.id), user_id:uid, board_id:board.id, item_type:item.type || "note", payload:item, updated_at:new Date().toISOString() })), "resolution=merge-duplicates,return=minimal");
+      }));
+    }
+    return { ok:true, enabled:true };
+  }
+
+  async function readSupabaseState() {
+    let directError = null;
+    try { return await hydrateSupabaseDirect(); } catch (error) { directError = error; console.warn("Vex direct Supabase read failed; trying server bridge:", error); }
+    try { return await supabaseRequest("GET"); } catch (bridgeError) { throw new Error(`${directError?.message || "Direct Supabase read failed"}; ${bridgeError.message}`); }
+  }
+
+  async function writeSupabaseState(payload) {
+    let directError = null;
+    try { return await syncSupabaseDirect(payload); } catch (error) { directError = error; console.warn("Vex direct Supabase write failed; trying server bridge:", error); }
+    try { return await supabaseRequest("PUT", payload); } catch (bridgeError) { throw new Error(`${directError?.message || "Direct Supabase write failed"}; ${bridgeError.message}`); }
   }
 
   async function stateSyncPayload(scopes = new Set(["page", "board", "settings", "typing"])) {
@@ -990,7 +1045,7 @@
   }
 
   async function hydrateSupabaseUserData(user, requestId, requestUserId) {
-    const data = await supabaseRequest("GET");
+    const data = await readSupabaseState();
     if (!data?.enabled || requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return false;
     const pages = Array.isArray(data.pages) ? data.pages : [];
     const boards = Array.isArray(data.boards) ? data.boards : [];
@@ -1038,7 +1093,7 @@
 
   async function trySupabaseSync(scopes, versions) {
     if (!supabaseConfig.enabled || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return false;
-    await supabaseRequest("PUT", await stateSyncPayload(scopes));
+    await writeSupabaseState(await stateSyncPayload(scopes));
     clearSyncedScopes(scopes, versions);
     syncStatus = dirtyScopes.size ? "saving" : "synced";
     updateSyncLabels();
