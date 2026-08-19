@@ -6,7 +6,7 @@ import hmac
 import hashlib
 import base64
 from functools import wraps
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from dotenv import load_dotenv
 import requests
 
@@ -345,7 +345,8 @@ def index():
 
 @app.route("/login")
 def login():
-    return render_page("login.html")
+    # Authentication remains in the repository for a later phase, but the prototype keeps it paused.
+    return redirect(url_for("index"))
 
 @app.route("/dashboard")
 def dashboard():
