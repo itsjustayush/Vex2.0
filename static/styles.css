@@ -231,3 +231,21 @@ button, [role="button"] { cursor: pointer; }
   .typing-prompt { min-height: 145px; padding: 22px 10px; font-size: 22px; }
   .typing-exercises { padding-bottom: 96px; }
 }
+
+/* Past activity and endless moodboards */
+.history-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; z-index: 35; background: rgba(8,8,10,.62); backdrop-filter: blur(18px); }
+.history-modal { position: relative; width: min(620px, 100%); max-height: min(760px, 90vh); overflow: auto; padding: 30px; border: 1px solid var(--line-strong); border-radius: 26px; background: var(--panel-solid); color: var(--ink); box-shadow: 0 32px 90px rgba(0,0,0,.35); }
+.history-modal h2 { margin: 20px 0 6px; font: 700 clamp(28px, 5vw, 42px)/1 "Space Grotesk", sans-serif; letter-spacing: -.06em; }
+.history-subtitle { margin: 0 0 24px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.history-list { display: grid; gap: 8px; margin: 0 0 22px; }
+.history-row { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 11px; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: transparent; color: var(--ink); text-align: left; transition: .18s ease; }
+.history-row:hover { border-color: var(--accent); background: var(--accent-soft); transform: translateX(2px); }
+.history-row strong, .history-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-row strong { font-size: 13px; }
+.history-row small, .history-row time { color: var(--muted); font-size: 11px; }
+.history-row time { font-family: "IBM Plex Mono", monospace; }
+.history-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.history-empty { padding: 15px; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--muted); font-size: 12px; }
+.moodboard { touch-action: none; }
+.moodboard::after { content: "scroll to zoom · drag empty space to pan"; position: absolute; left: 16px; bottom: 14px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--panel-solid) 76%, transparent); color: var(--muted); font: 10px "IBM Plex Mono", monospace; pointer-events: none; }
+@media (max-width: 620px) { .history-modal { padding: 23px 17px; }.history-row { grid-template-columns: 30px minmax(0,1fr); }.history-row time { display: none; } }

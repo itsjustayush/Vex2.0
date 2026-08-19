@@ -6,16 +6,24 @@
   const defaultState = {
     theme: "dark",
     pageType: "ruled-single",
+    pageId: "daily-notes",
     muted: false,
     title: "A softer place to think",
     content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful.\n\n**Try typing** with the keyboard below, or switch to a moodboard when words need a little more space.\n\n`Inline code` · $E = mc^2$",
     typingStats: { completed: 0, bestWpm: 0, bestAccuracy: 0, lastWpm: 0, lastAccuracy: 0, streak: 0 },
+    pages: [{ id:"daily-notes", title:"A softer place to think", content:"# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful.\n\n**Try typing** with the keyboard below, or switch to a moodboard when words need a little more space.\n\n`Inline code` · $E = mc^2$", page_type:"ruled-single", updated_at:"" }],
+    boards: [{ id:"moodboard", title:"Moodboard", item_count:3, updated_at:"" }],
+    activeBoardId: "moodboard",
     mood: [
       { id: "m1", type: "note", color: "yellow", x: 170, y: 110, title: "small sparks", text: "Collect the tiny things before they disappear." },
       { id: "m2", type: "note", color: "pink", x: 460, y: 250, title: "make it playful", text: "A good system should feel like an invitation, not a chore." },
       { id: "m3", type: "note", color: "blue", x: 820, y: 110, title: "next", text: "Turn the loose ideas into one tiny experiment." }
-    ]
+    ],
+    boardItems: {},
+    boardZoom: 1,
+    boardPan: { x: 0, y: 0 },
   };
+  defaultState.boardItems.moodboard = defaultState.mood;
 
   let state = loadState();
   let saveTimer = null;
@@ -40,15 +48,57 @@
     return JSON.parse(JSON.stringify(source));
   }
 
+  function ensureWorkspaceHistory(target = state) {
+    target.pages = Array.isArray(target.pages) && target.pages.length ? target.pages : [{ id:target.pageId || "daily-notes", title:target.title, content:target.content, page_type:target.pageType, updated_at:"" }];
+    target.boards = Array.isArray(target.boards) && target.boards.length ? target.boards : [{ id:"moodboard", title:"Moodboard", item_count:target.mood?.length || 0, updated_at:"" }];
+    target.activeBoardId = target.activeBoardId || target.boards[0].id;
+    target.boardItems = target.boardItems && typeof target.boardItems === "object" ? target.boardItems : {};
+    if (!target.boardItems[target.activeBoardId]) target.boardItems[target.activeBoardId] = Array.isArray(target.mood) ? target.mood : [];
+    target.mood = target.boardItems[target.activeBoardId];
+    target.boardZoom = Number(target.boardZoom) || 1;
+    target.boardPan = target.boardPan && typeof target.boardPan === "object" ? target.boardPan : { x:0, y:0 };
+  }
+
+  function setActiveBoard(boardId) {
+    ensureWorkspaceHistory();
+    if (!state.boards.some(board => board.id === boardId)) return;
+    state.activeBoardId = boardId;
+    if (!state.boardItems[boardId]) state.boardItems[boardId] = [];
+    state.mood = state.boardItems[boardId];
+    state.boardZoom = 1;
+    state.boardPan = { x:0, y:0 };
+  }
+
   function loadState() {
     // Guest sessions intentionally never hydrate from localStorage.
     // Any legacy local draft is removed so unauthenticated data cannot persist.
     try { localStorage.removeItem(storageKey); } catch (_) {}
-    return cloneState(defaultState);
+    const guestState = cloneState(defaultState);
+    ensureWorkspaceHistory(guestState);
+    return guestState;
+  }
+
+  function rememberCurrentPage() {
+    ensureWorkspaceHistory();
+    const page = { id:state.pageId || "daily-notes", title:state.title || "Untitled page", content:state.content || "", page_type:state.pageType, updated_at:new Date().toISOString() };
+    state.pageId = page.id;
+    const index = state.pages.findIndex(item => item.id === page.id);
+    if (index >= 0) state.pages[index] = { ...state.pages[index], ...page };
+    else state.pages.unshift(page);
+  }
+
+  function rememberCurrentBoard() {
+    ensureWorkspaceHistory();
+    const board = state.boards.find(item => item.id === state.activeBoardId);
+    if (board) { board.item_count = state.mood.length; board.updated_at = new Date().toISOString(); }
+    state.boardItems[state.activeBoardId] = state.mood;
   }
 
   function persist(scope = "all") {
-    if (scope === "all") ["page", "board", "settings"].forEach(name => dirtyScopes.add(name));
+    ensureWorkspaceHistory();
+    if (scope === "page") rememberCurrentPage();
+    if (scope === "board") rememberCurrentBoard();
+    if (scope === "all") ["page", "board", "settings", "typing"].forEach(name => dirtyScopes.add(name));
     else dirtyScopes.add(scope);
     clearTimeout(saveTimer);
     if (!firebaseUser) {
@@ -416,7 +466,7 @@
         <button class="side-item ${workspaceTab === "write" && !state.moodboard ? "active" : ""}" data-action="focus-editor"><span class="item-icon">${icon("note")}</span><span>Daily notes</span><small>⌘1</small></button>
         <button class="side-item ${state.moodboard ? "active" : ""}" data-action="switch-moodboard"><span class="item-icon">${icon("board")}</span><span>Moodboard</span><small>⌘2</small></button>
         <button class="side-item ${workspaceTab === "typing" ? "active" : ""}" data-action="switch-typing"><span class="item-icon">⌁</span><span>Enhance typing</span><small>⌘3</small></button>
-        <button class="side-item" data-action="coming-soon"><span class="item-icon">${icon("folder")}</span><span>All pages</span><small>3</small></button>
+        <button class="side-item" data-action="open-pages"><span class="item-icon">${icon("folder")}</span><span>All pages</span><small>${(state.pages?.length || 0) + (state.boards?.length || 0)}</small></button>
       </div>
       <div class="side-section"><p class="side-label">page style</p>
         <button class="side-item" data-action="set-page-type" data-value="plain"><span class="item-icon">—</span><span>Plain page</span></button>
@@ -459,7 +509,10 @@
   }
 
   function renderMoodboard() {
-    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="Moodboard" aria-label="Moodboard title" readonly /><div class="editor-tools"><label class="primary-btn">${icon("plus")} Add media<input type="file" accept="image/*,video/*" multiple hidden data-file-upload /></label><button class="pill-btn" data-action="add-note">${icon("note")} <span>Note</span></button></div></div><div class="page-meta"><span>Endless canvas · drag anything anywhere</span><div class="page-switcher"><button class="active">moodboard</button><button data-action="coming-soon">zoom 100%</button></div></div><div class="moodboard" data-moodboard><div class="mood-canvas">${state.mood.map(renderMoodItem).join("")}</div>${state.mood.length === 0 ? `<div class="mood-empty"><div><strong>Your canvas is wide open.</strong>Drop in an image, video, or note to begin.</div></div>` : ""}</div></section>`;
+    ensureWorkspaceHistory();
+    const board = state.boards.find(item => item.id === state.activeBoardId) || state.boards[0];
+    const zoomPercent = Math.round(state.boardZoom * 100);
+    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(board.title)}" aria-label="Moodboard title" readonly /><div class="editor-tools"><button class="pill-btn" data-action="new-board">${icon("plus")} <span>New board</span></button><label class="primary-btn">${icon("plus")} Add media<input type="file" accept="image/*,video/*" multiple hidden data-file-upload /></label><button class="pill-btn" data-action="add-note">${icon("note")} <span>Note</span></button></div></div><div class="page-meta"><span>Endless canvas · drag to pan · scroll to zoom</span><div class="page-switcher">${state.boards.map(item => `<button class="${item.id === state.activeBoardId ? "active" : ""}" data-action="select-board" data-board-id="${item.id}">${escapeHtml(item.title)}</button>`).join("")}<button data-action="zoom-board" data-zoom="out">−</button><button class="active">${zoomPercent}%</button><button data-action="zoom-board" data-zoom="in">+</button><button data-action="zoom-board" data-zoom="reset">reset</button></div></div><div class="moodboard" data-moodboard><div class="mood-canvas" style="transform:translate(${state.boardPan.x}px,${state.boardPan.y}px) scale(${state.boardZoom})">${state.mood.map(renderMoodItem).join("")}</div>${state.mood.length === 0 ? `<div class="mood-empty"><div><strong>Your canvas is wide open.</strong>Drop in an image, video, or note to begin.</div></div>` : ""}</div></section>`;
   }
   function renderMoodItem(item) {
     if (item.type === "note") return `<article class="mood-note ${item.color}" data-mood-id="${item.id}" style="left:${item.x}px;top:${item.y}px"><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.text)}</p></article>`;
@@ -486,6 +539,20 @@
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(document.getElementById("app"));
     if (workspaceTab === "typing" && !typingSession.ready) resetTypingSession(typingSession.exerciseId);
+  }
+
+  function showPagesModal() {
+    ensureWorkspaceHistory();
+    document.querySelector(".history-backdrop")?.remove();
+    const backdrop = document.createElement("div");
+    backdrop.className = "history-backdrop";
+    const pageRows = state.pages.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(page => `<button class="history-row" data-history-page="${page.id}"><span class="history-icon">${icon("note")}</span><span><strong>${escapeHtml(page.title || "Untitled page")}</strong><small>${escapeHtml((page.content || "").replace(/[#*`\n]/g, " ").slice(0, 88) || "Empty page")}</small></span><time>${page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "starter"}</time></button>`).join("");
+    const boardRows = state.boards.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(board => `<button class="history-row" data-history-board="${board.id}"><span class="history-icon board-icon">${icon("board")}</span><span><strong>${escapeHtml(board.title || "Untitled board")}</strong><small>${board.item_count || 0} pieces on the canvas</small></span><time>${board.updated_at ? new Date(board.updated_at).toLocaleDateString() : "starter"}</time></button>`).join("");
+    backdrop.innerHTML = `<div class="history-modal"><button class="auth-close" data-action="close-history" aria-label="Close history">×</button><span class="eyebrow"><b>✦</b> your archive</span><h2>Past activity</h2><p class="history-subtitle">Your notes and moodboards, kept private to this account.</p><p class="side-label">notes</p><div class="history-list">${pageRows || `<div class="history-empty">No saved notes yet.</div>`}</div><p class="side-label">moodboards</p><div class="history-list">${boardRows || `<div class="history-empty">No saved moodboards yet.</div>`}</div></div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener("click", event => { if (event.target === backdrop || event.target.closest("[data-action='close-history']")) backdrop.remove(); });
+    backdrop.querySelectorAll("[data-history-page]").forEach(button => button.addEventListener("click", () => { const page = state.pages.find(item => item.id === button.dataset.historyPage); if (!page) return; state.pageId=page.id; state.title=page.title || "Untitled page"; state.content=page.content || ""; state.pageType=page.page_type || "ruled-single"; state.moodboard=false; workspaceTab="write"; backdrop.remove(); renderApp(); }));
+    backdrop.querySelectorAll("[data-history-board]").forEach(button => button.addEventListener("click", () => { setActiveBoard(button.dataset.historyBoard); state.moodboard=true; workspaceTab="write"; backdrop.remove(); renderApp(); }));
   }
 
   function renderAll() { activeView === "landing" ? renderLanding() : renderApp(); }
@@ -517,13 +584,17 @@
     root.querySelectorAll("[data-action='switch-typing']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "typing"; state.moodboard = false; resetTypingSession("home-row"); renderApp(); }));
     root.querySelectorAll("[data-action='reset-typing']").forEach(btn => btn.addEventListener("click", () => { resetTypingSession(typingSession.exerciseId); renderApp(); }));
     root.querySelectorAll("[data-action='select-exercise']").forEach(btn => btn.addEventListener("click", () => { typingSession.exerciseId = btn.dataset.exerciseId; resetTypingSession(btn.dataset.exerciseId); renderApp(); }));
-    root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; state.title = "Untitled page"; state.content = ""; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
+    root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; state.pageId = "page-" + Date.now(); state.title = "Untitled page"; state.content = ""; state.pageType = "ruled-single"; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
     root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist("page"); renderAll(); }));
     root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
     root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
+    root.querySelectorAll("[data-action='open-pages']").forEach(btn => btn.addEventListener("click", showPagesModal));
+    root.querySelectorAll("[data-action='new-board']").forEach(btn => btn.addEventListener("click", () => { ensureWorkspaceHistory(); const board = { id:"board-" + Date.now(), title:"New moodboard", item_count:0, updated_at:new Date().toISOString() }; state.boards.unshift(board); state.boardItems[board.id]=[]; setActiveBoard(board.id); state.moodboard=true; workspaceTab="write"; persist("board"); renderApp(); showToast("New moodboard created"); }));
+    root.querySelectorAll("[data-action='select-board']").forEach(btn => btn.addEventListener("click", () => { setActiveBoard(btn.dataset.boardId); state.moodboard=true; renderApp(); }));
+    root.querySelectorAll("[data-action='zoom-board']").forEach(btn => btn.addEventListener("click", () => { const action=btn.dataset.zoom; if (action === "in") state.boardZoom=Math.min(2.5, state.boardZoom + .1); if (action === "out") state.boardZoom=Math.max(.45, state.boardZoom - .1); if (action === "reset") { state.boardZoom=1; state.boardPan={x:0,y:0}; } renderApp(); }));
     root.querySelectorAll("[data-action='add-note']").forEach(btn => btn.addEventListener("click", () => { state.mood.push({ id:"m" + Date.now(), type:"note", color:["yellow","pink","blue","green"][state.mood.length % 4], x:180 + state.mood.length * 48, y:160 + state.mood.length * 35, title:"new thought", text:"Double-click to make this yours." }); persist("board"); renderAll(); }));
     root.querySelectorAll("[data-action='share-note']").forEach(btn => btn.addEventListener("click", shareNote));
     root.querySelectorAll("[data-action='export-page']").forEach(btn => btn.addEventListener("click", showExportMenu));
@@ -555,6 +626,8 @@
     root.querySelectorAll(".key").forEach(key => key.addEventListener("click", () => handleVirtualKey(key)));
     root.querySelectorAll("[data-file-upload]").forEach(input => input.addEventListener("change", e => handleFiles(e.target.files)));
     root.querySelectorAll(".mood-note, .mood-image").forEach(item => enableDrag(item));
+    const moodboard = root.querySelector("[data-moodboard]");
+    if (moodboard) enableCanvasPan(moodboard);
     updateSyncLabels();
   }
 
@@ -670,9 +743,35 @@
 
   function enableDrag(element) {
     let startX, startY, originX, originY;
-    element.addEventListener("pointerdown", e => { if (e.target.closest("button")) return; element.setPointerCapture(e.pointerId); const item = state.mood.find(x => x.id === element.dataset.moodId); if (!item) return; startX=e.clientX;startY=e.clientY;originX=item.x;originY=item.y; element.addEventListener("pointermove", move); element.addEventListener("pointerup", up, { once:true }); });
-    function move(e) { const item = state.mood.find(x => x.id === element.dataset.moodId); if (!item) return; item.x = originX + e.clientX - startX; item.y = originY + e.clientY - startY; element.style.left=item.x+"px"; element.style.top=item.y+"px"; }
+    element.addEventListener("pointerdown", e => { if (e.target.closest("button")) return; e.stopPropagation(); element.setPointerCapture(e.pointerId); const item = state.mood.find(x => x.id === element.dataset.moodId); if (!item) return; startX=e.clientX;startY=e.clientY;originX=item.x;originY=item.y; element.addEventListener("pointermove", move); element.addEventListener("pointerup", up, { once:true }); });
+    function move(e) { const item = state.mood.find(x => x.id === element.dataset.moodId); if (!item) return; item.x = originX + (e.clientX - startX) / state.boardZoom; item.y = originY + (e.clientY - startY) / state.boardZoom; element.style.left=item.x+"px"; element.style.top=item.y+"px"; }
     function up() { element.removeEventListener("pointermove", move); persist("board"); }
+  }
+
+  function enableCanvasPan(moodboard) {
+    let startX = 0, startY = 0, originX = 0, originY = 0, panning = false;
+    moodboard.addEventListener("wheel", event => {
+      event.preventDefault();
+      const direction = event.deltaY > 0 ? -.08 : .08;
+      state.boardZoom = Math.min(2.5, Math.max(.45, state.boardZoom + direction));
+      const canvas = moodboard.querySelector(".mood-canvas");
+      if (canvas) canvas.style.transform = `translate(${state.boardPan.x}px,${state.boardPan.y}px) scale(${state.boardZoom})`;
+      const zoomLabel = moodboard.closest(".editor-stage")?.querySelector("[data-zoom-label]");
+      if (zoomLabel) zoomLabel.textContent = `${Math.round(state.boardZoom * 100)}%`;
+    }, { passive:false });
+    moodboard.addEventListener("pointerdown", event => {
+      if (event.target.closest(".mood-note, .mood-image, button, input, label")) return;
+      panning = true; startX=event.clientX; startY=event.clientY; originX=state.boardPan.x; originY=state.boardPan.y; moodboard.setPointerCapture(event.pointerId);
+    });
+    moodboard.addEventListener("pointermove", event => {
+      if (!panning) return;
+      state.boardPan.x = originX + event.clientX - startX;
+      state.boardPan.y = originY + event.clientY - startY;
+      const canvas = moodboard.querySelector(".mood-canvas");
+      if (canvas) canvas.style.transform = `translate(${state.boardPan.x}px,${state.boardPan.y}px) scale(${state.boardZoom})`;
+    });
+    moodboard.addEventListener("pointerup", () => { if (panning) { panning=false; persist("board"); } });
+    moodboard.addEventListener("pointercancel", () => { panning=false; });
   }
 
   let userHydrated = false;
@@ -713,33 +812,43 @@
       userHydrated = false;
       syncStatus = "loading your space";
       updateSyncLabels();
-      const [pageSnap, settingsSnap, boardSnap, itemsSnap, typingSnap] = await Promise.all([
-        userPage(user.uid).get(),
+      const [pagesSnap, settingsSnap, boardsSnap, typingSnap] = await Promise.all([
+        userRoot(user.uid).collection("pages").limit(100).get(),
         userRoot(user.uid).collection("settings").doc("preferences").get(),
-        userBoard(user.uid).get(),
-        userBoard(user.uid).collection("items").orderBy("updated_at", "desc").limit(200).get(),
+        userRoot(user.uid).collection("boards").limit(50).get(),
         userTyping(user.uid).get()
       ]);
-      if (pageSnap.exists) {
-        const page = pageSnap.data();
-        state.title = page.title || state.title;
-        state.content = page.content || state.content;
-        state.pageType = page.page_type || state.pageType;
+      const pageDocs = pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+      const boardDocs = boardsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+      const itemResults = await Promise.all(boardDocs.map(board => userRoot(user.uid).collection("boards").doc(board.id).collection("items").limit(500).get()));
+      state.pages = pageDocs.length ? pageDocs : state.pages;
+      state.boards = boardDocs.length ? boardDocs : state.boards;
+      state.boardItems = {};
+      boardDocs.forEach((board, index) => { state.boardItems[board.id] = itemResults[index].docs.map(doc => ({ id:doc.id, ...doc.data() })); });
+      const latestPage = state.pages[0];
+      if (latestPage) {
+        state.pageId = latestPage.id;
+        state.title = latestPage.title || "Untitled page";
+        state.content = latestPage.content || "";
+        state.pageType = latestPage.page_type || "ruled-single";
       }
       if (settingsSnap.exists) {
         const settings = settingsSnap.data();
         if (settings.theme) state.theme = settings.theme;
         if (typeof settings.muted === "boolean") state.muted = settings.muted;
       }
-      if (itemsSnap.size) state.mood = itemsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+      ensureWorkspaceHistory();
+      const firstBoard = state.boards[0];
+      if (firstBoard) setActiveBoard(firstBoard.id);
+      state.moodboard = false;
+      workspaceTab = "write";
       if (typingSnap.exists) state.typingStats = { ...defaultState.typingStats, ...typingSnap.data() };
-      if (boardSnap.exists) state.moodboard = true;
       userHydrated = true;
       syncStatus = "synced";
       document.documentElement.dataset.theme = state.theme;
       updateFavicon(state.theme);
       renderAll();
-      if (!pageSnap.exists && !boardSnap.exists && !settingsSnap.exists && !itemsSnap.size && !typingSnap.exists) await tryRemoteSync();
+      if (!pagesSnap.size && !boardsSnap.size && !settingsSnap.exists && !typingSnap.exists) await tryRemoteSync();
     } catch (_) {
       userHydrated = true;
       syncStatus = "signed in · retrying sync";
@@ -759,13 +868,21 @@
       if (!scopes.size) return;
       const batch = firebaseDb.batch();
       batch.set(userRoot(uid), { uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 }, { merge:true });
-      if (scopes.has("page")) batch.set(userPage(uid), { page_id:"daily-notes", title:state.title, content:state.content, page_type:state.pageType, updated_at:now, schema_version:1 }, { merge:true });
-      if (scopes.has("settings")) batch.set(userRoot(uid).collection("settings").doc("preferences"), { theme:state.theme, muted:state.muted, updated_at:now, schema_version:1 }, { merge:true });
+      if (scopes.has("page")) {
+        rememberCurrentPage();
+        state.pages.slice(0, 100).forEach(page => batch.set(userRoot(uid).collection("pages").doc(String(page.id)), { ...page, schema_version:1 }, { merge:true }));
+      }
+      if (scopes.has("settings")) batch.set(userRoot(uid).collection("settings").doc("preferences"), { theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId, updated_at:now, schema_version:1 }, { merge:true });
       if (scopes.has("typing")) batch.set(userTyping(uid), { ...state.typingStats, updated_at:now, schema_version:1 }, { merge:true });
       if (scopes.has("board")) {
-        const moodItems = await Promise.all(state.mood.slice(0, 450).map(item => prepareMoodItemForSync(item, uid)));
-        batch.set(userBoard(uid), { board_id:"moodboard", title:"Moodboard", item_count:state.mood.length, updated_at:now, schema_version:1 }, { merge:true });
-        moodItems.forEach(item => batch.set(userBoard(uid).collection("items").doc(String(item.id)), { ...item, updated_at:now, schema_version:1 }, { merge:true }));
+        rememberCurrentBoard();
+        for (const board of state.boards.slice(0, 50)) {
+          const items = state.boardItems[board.id] || [];
+          const boardRef = userRoot(uid).collection("boards").doc(String(board.id));
+          batch.set(boardRef, { ...board, board_id:board.id, item_count:items.length, updated_at:board.id === state.activeBoardId ? now : (board.updated_at || now), schema_version:1 }, { merge:true });
+          const syncedItems = await Promise.all(items.slice(0, 500).map(item => prepareMoodItemForSync(item, uid)));
+          syncedItems.forEach(item => batch.set(boardRef.collection("items").doc(String(item.id)), { ...item, updated_at:now, schema_version:1 }, { merge:true }));
+        }
       }
       await batch.commit();
       scopes.forEach(scope => dirtyScopes.delete(scope));
