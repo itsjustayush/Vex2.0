@@ -12,7 +12,7 @@ The root experience is a redesigned Vex landing page with the live workspace emb
 
 Guests use an in-memory workspace and saved data is written only after authentication. The client uses the supplied mechanical keyboard sound pack (`static/sound.ogg` plus `static/sound-config.json`) and maps physical `KeyboardEvent.code` values to the visible keys in real time. Firebase Google sign-in and Resend-backed six-digit email OTP sign-in are available from the in-app Sign in modal. After submitting an email, Vex opens a dedicated branded verification screen with resend and change-email actions. Enable **Google** in Firebase Authentication, add the deployed hostname under Authorized domains, and configure the Resend and Firebase Admin variables described below.
 
-The client detects the existing Firebase configuration and writes to the authenticated user’s private Firestore space. The original Firebase email-link helper remains preserved for backwards compatibility with previously issued links, but new email sign-ins use the server-side Resend OTP flow.
+The client detects the existing Firebase configuration for authentication and media storage. Durable notes, moodboards, board items, preferences, and typing statistics are stored in the Vex Supabase project through authenticated Flask endpoints that verify the Firebase ID token and scope every query by the Firebase Auth UID. The original Firebase email-link helper remains preserved for backwards compatibility with previously issued links, but new email sign-ins use the server-side Resend OTP flow.
 
 ## Branded email OTP setup
 
@@ -47,9 +47,9 @@ Then open `http://127.0.0.1:3000/`.
 
 | Path | Purpose |
 | --- | --- |
-| `app.py` | Preserved Flask entrypoint, Firebase configuration, legacy API/auth foundations, and static page serving. |
+| `app.py` | Preserved Flask entrypoint, Firebase configuration, authenticated Supabase persistence bridge, legacy API/auth foundations, and static page serving. |
 | `templates/index.html` | Minimal HTML shell for the prototype. |
-| `static/app.js` | Landing page, editor, keyboard, themes, persistence, Firebase sync adapter, and moodboard interactions. |
+| `static/app.js` | Landing page, editor, keyboard, themes, Supabase/Firebase persistence adapters, and moodboard interactions. |
 | `static/styles.css` | Visual system, responsive layout, page textures, keyboard treatment, auth modal, and theme palettes. |
 | `static/sound.ogg` | Supplied CherryMX-style sound pack used for keydown playback. |
 | `static/sound-config.json` | Sample offsets used to play the matching key segment. |
@@ -60,9 +60,13 @@ Then open `http://127.0.0.1:3000/`.
 
 ## Persistence and storage model
 
-Vex starts every unauthenticated visitor in an in-memory guest session. Guests can use the editor, keyboard, themes, and moodboard normally, but the app does not read or write the workspace to `localStorage`, Firebase, or the server. The guest status is shown as `guest · not saved`, with a visible sign-in-to-save action. After Google or email authentication, the current in-memory workspace is hydrated from, or promoted into, the authenticated user’s private Firestore space.
+Vex starts every unauthenticated visitor in an in-memory guest session. Guests can use the editor, keyboard, themes, and moodboard normally, but the app does not read or write the workspace to `localStorage`, Firebase, or the server. The guest status is shown as `guest · not saved`, with a visible sign-in-to-save action. After Google or email authentication, the current in-memory workspace is hydrated from, or promoted into, the authenticated user’s private Supabase space through the Firebase-verified Flask bridge.
 
-The scalable schema is rooted at the Firebase Auth UID: `users/{uid}` stores profile metadata, `users/{uid}/pages/{pageId}` stores page documents, `users/{uid}/boards/{boardId}` stores board metadata, `users/{uid}/boards/{boardId}/items/{itemId}` stores individual moodboard items, and `users/{uid}/settings/{settingId}` stores preferences. Firestore rules allow access only when `request.auth.uid` matches the `{uid}` path segment. Batched writes keep page, board, item, and settings updates efficient while limiting a board sync to the first 450 items under Firestore’s batch limit. Large moodboard images are uploaded to `users/{uid}/moodboard/{fileName}` in Firebase Storage, with only their download URL and metadata kept in Firestore.
+The durable Supabase schema is rooted at the Firebase Auth UID: `vex_pages` stores note documents, `vex_boards` stores board metadata, `vex_board_items` stores individual moodboard pieces, `vex_settings` stores preferences, and `vex_typing_stats` stores per-user typing statistics. The Flask bridge verifies the Firebase ID token before querying or upserting rows and always applies the authenticated UID filter. Row-level security is enabled on all Vex tables. Firebase Storage remains responsible for moodboard media under `users/{uid}/moodboard/{fileName}`. Set `SUPABASE_URL` and the server-only `SUPABASE_SERVICE_ROLE_KEY` in Vercel; never expose the service-role key to browser code.
+
+## Deployment persistence variables
+
+In addition to the Firebase and Resend variables, production requires `SUPABASE_URL=https://qdsdjgfvimuvdujxouab.supabase.co` and a server-only `SUPABASE_SERVICE_ROLE_KEY` from the Vex Supabase project. The browser receives only the project URL and never receives the service-role key. Cross-device sync is available only after the user signs in or signs up, which keeps every saved workspace tied to a verified Firebase Auth UID.
 
 ## Next implementation phase
 

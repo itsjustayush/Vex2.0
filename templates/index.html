@@ -51,6 +51,7 @@
     <link rel="preload" href="{{ url_for('static', filename='sound.ogg') }}" as="audio" type="audio/ogg" />
     <script>
       window.VEX_FIREBASE_CONFIG = {{ firebase_json | safe }};
+      window.VEX_SUPABASE_CONFIG = {{ supabase_json | safe }};
     </script>
   </head>
   <body>

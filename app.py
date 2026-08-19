@@ -39,6 +39,9 @@ PROJECT_ID = FIREBASE_CONFIG.get("projectId") or os.getenv("FIREBASE_PROJECT_ID"
 API_KEY = FIREBASE_CONFIG.get("apiKey") or os.getenv("FIREBASE_API_KEY", "")
 AUTH_DOMAIN = FIREBASE_CONFIG.get("authDomain") or os.getenv("FIREBASE_AUTH_DOMAIN", f"{PROJECT_ID}.firebaseapp.com")
 FIRESTORE_DATABASE_ID = FIREBASE_CONFIG.get("firestoreDatabaseId") or os.getenv("FIRESTORE_DATABASE_ID", "(default)")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://qdsdjgfvimuvdujxouab.supabase.co").rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
 
 # Optional PyJWT import
 try:
@@ -312,6 +315,95 @@ def require_auth(f):
     return decorated_function
 
 
+def _supabase_headers(prefer="return=minimal"):
+    return {"apikey": SUPABASE_SERVICE_ROLE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}", "Content-Type": "application/json", "Prefer": prefer}
+
+
+def _supabase_request(method, table, *, params=None, payload=None, prefer="return=minimal"):
+    if not SUPABASE_ENABLED:
+        raise RuntimeError("Supabase persistence is not configured on the server.")
+    response = requests.request(method, f"{SUPABASE_URL}/rest/v1/{table}", headers=_supabase_headers(prefer), params=params or {}, json=payload, timeout=20)
+    if not response.ok:
+        raise RuntimeError(f"Supabase {method} {table} failed ({response.status_code}): {response.text[:500]}")
+    if not response.content:
+        return []
+    return response.json()
+
+
+def _supabase_user_params(uid, select="*"):
+    return {"user_id": f"eq.{uid}", "select": select}
+
+
+@app.route("/api/sync/state", methods=["GET"])
+@require_auth
+def supabase_sync_get():
+    if not SUPABASE_ENABLED:
+        return jsonify({"enabled": False, "detail": "Supabase persistence is not configured."}), 503
+    uid = request.user_id
+    try:
+        pages = _supabase_request("GET", "vex_pages", params={**_supabase_user_params(uid), "order": "updated_at.desc", "limit": "100"})
+        boards = _supabase_request("GET", "vex_boards", params={**_supabase_user_params(uid), "order": "updated_at.desc", "limit": "50"})
+        items = _supabase_request("GET", "vex_board_items", params={**_supabase_user_params(uid), "limit": "5000"})
+        settings_rows = _supabase_request("GET", "vex_settings", params={**_supabase_user_params(uid), "limit": "1"})
+        typing_rows = _supabase_request("GET", "vex_typing_stats", params={**_supabase_user_params(uid), "limit": "1"})
+        settings = settings_rows[0].get("preferences", {}) if settings_rows else {}
+        typing = typing_rows[0].get("stats", {}) if typing_rows else {}
+        return jsonify({"enabled": True, "pages": pages, "boards": boards, "items": items, "settings": settings, "typing": typing})
+    except Exception as error:
+        app.logger.exception("Vex Supabase read failed")
+        return jsonify({"detail": str(error)}), 502
+
+
+@app.route("/api/sync/state", methods=["PUT"])
+@require_auth
+def supabase_sync_put():
+    if not SUPABASE_ENABLED:
+        return jsonify({"enabled": False, "detail": "Supabase persistence is not configured."}), 503
+    uid = request.user_id
+    body = request.get_json(silent=True) or {}
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        writes = []
+        for page in (body.get("pages") or [])[:100]:
+            page_id = str(page.get("id") or "").strip()
+            if page_id:
+                writes.append({"id": page_id, "user_id": uid, "title": str(page.get("title") or "Untitled page"), "content": str(page.get("content") or ""), "page_type": str(page.get("page_type") or "ruled-single"), "updated_at": page.get("updated_at") or now, "metadata": {"schema_version": 1}})
+        if writes:
+            _supabase_request("POST", "vex_pages", params={"on_conflict": "user_id,id"}, payload=writes, prefer="resolution=merge-duplicates,return=minimal")
+        board_rows = []
+        item_rows = []
+        board_ids = []
+        for board in (body.get("boards") or [])[:50]:
+            board_id = str(board.get("id") or "").strip()
+            if not board_id:
+                continue
+            board_items = [item for item in (body.get("board_items") or {}).get(board_id, [])[:500] if item.get("id") is not None]
+            board_ids.append(board_id)
+            board_rows.append({"id": board_id, "user_id": uid, "title": str(board.get("title") or "Moodboard"), "item_count": len(board_items), "updated_at": board.get("updated_at") or now, "metadata": {"schema_version": 1}})
+            item_rows.extend({"id": str(item.get("id")), "user_id": uid, "board_id": board_id, "item_type": str(item.get("type") or "note"), "payload": item, "updated_at": now} for item in board_items)
+        if board_rows:
+            _supabase_request("POST", "vex_boards", params={"on_conflict": "user_id,id"}, payload=board_rows, prefer="resolution=merge-duplicates,return=minimal")
+        for board_id in board_ids:
+            _supabase_request("DELETE", "vex_board_items", params={"user_id": f"eq.{uid}", "board_id": f"eq.{board_id}"})
+        if item_rows:
+            _supabase_request("POST", "vex_board_items", params={"on_conflict": "user_id,board_id,id"}, payload=item_rows, prefer="resolution=merge-duplicates,return=minimal")
+        for deletion in (body.get("deleted_items") or [])[:500]:
+            board_id = str(deletion.get("board_id") or "").strip()
+            item_id = str(deletion.get("id") or "").strip()
+            if board_id and item_id:
+                _supabase_request("DELETE", "vex_board_items", params={"user_id": f"eq.{uid}", "board_id": f"eq.{board_id}", "id": f"eq.{item_id}"})
+        settings = body.get("settings")
+        if isinstance(settings, dict):
+            _supabase_request("POST", "vex_settings", params={"on_conflict": "user_id"}, payload={"user_id": uid, "preferences": settings, "updated_at": now}, prefer="resolution=merge-duplicates,return=minimal")
+        typing = body.get("typing")
+        if isinstance(typing, dict):
+            _supabase_request("POST", "vex_typing_stats", params={"on_conflict": "user_id"}, payload={"user_id": uid, "stats": typing, "updated_at": now}, prefer="resolution=merge-duplicates,return=minimal")
+        return jsonify({"ok": True, "updated_at": now})
+    except Exception as error:
+        app.logger.exception("Vex Supabase write failed")
+        return jsonify({"detail": str(error)}), 502
+
+
 def save_version_snapshot(note_id, title, content, user_id):
     now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
     version_obj = {
@@ -339,7 +431,9 @@ def render_page(template_name):
     return render_template(
         template_name,
         firebase_config=FIREBASE_CONFIG,
-        firebase_json=json.dumps(FIREBASE_CONFIG)
+        firebase_json=json.dumps(FIREBASE_CONFIG),
+        supabase_config={"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else ""},
+        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else ""})
     )
 
 @app.route("/")

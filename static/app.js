@@ -2,6 +2,7 @@
   "use strict";
 
   const firebaseConfig = window.VEX_FIREBASE_CONFIG || {};
+  const supabaseConfig = window.VEX_SUPABASE_CONFIG || {};
   const storageKey = "vex:prototype:workspace";
   const defaultState = {
     theme: "dark",
@@ -94,6 +95,24 @@
     const board = state.boards.find(item => item.id === state.activeBoardId);
     if (board) { board.item_count = state.mood.length; board.updated_at = new Date().toISOString(); }
     state.boardItems[state.activeBoardId] = state.mood;
+  }
+
+  async function supabaseRequest(method, payload = null) {
+    if (!supabaseConfig.enabled || !firebaseUser) return null;
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `Supabase sync failed (${response.status}).`);
+    return data;
+  }
+
+  async function stateSyncPayload() {
+    ensureWorkspaceHistory();
+    rememberCurrentPage();
+    rememberCurrentBoard();
+    const boardItems = {};
+    for (const board of state.boards) boardItems[board.id] = await Promise.all((state.boardItems[board.id] || []).slice(0, 500).map(item => prepareMoodItemForSync(item, firebaseUser.uid)));
+    return { pages:state.pages, boards:state.boards, board_items:boardItems, settings:{ theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId }, typing:state.typingStats };
   }
 
   function persist(scope = "all") {
@@ -956,6 +975,58 @@
     return safe;
   }
 
+  async function hydrateSupabaseUserData(user, requestId, requestUserId) {
+    const data = await supabaseRequest("GET");
+    if (!data?.enabled || requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return false;
+    const pages = Array.isArray(data.pages) ? data.pages : [];
+    const boards = Array.isArray(data.boards) ? data.boards : [];
+    const rows = Array.isArray(data.items) ? data.items : [];
+    const settings = data.settings && typeof data.settings === "object" ? data.settings : {};
+    state.pages = pages.length ? pages : cloneState(defaultState).pages;
+    state.boards = boards.length ? boards : cloneState(defaultState).boards;
+    state.boardItems = {};
+    remoteBoardItemIds = {};
+    state.boards.forEach(board => { state.boardItems[board.id] = []; remoteBoardItemIds[board.id] = []; });
+    rows.forEach(row => {
+      const item = row.payload && typeof row.payload === "object" ? { ...row.payload, id:row.id, type:row.item_type || row.payload.type || "note" } : { id:row.id, type:row.item_type || "note" };
+      state.boardItems[row.board_id] = state.boardItems[row.board_id] || [];
+      state.boardItems[row.board_id].push(item);
+      remoteBoardItemIds[row.board_id] = remoteBoardItemIds[row.board_id] || [];
+      remoteBoardItemIds[row.board_id].push(row.id);
+    });
+    const activePage = state.pages.find(page => page.id === settings.active_page_id) || state.pages[0];
+    state.pageId = activePage?.id || "daily-notes";
+    state.title = activePage?.title || "Untitled page";
+    state.content = activePage?.content || "";
+    state.pageType = activePage?.page_type || "ruled-single";
+    state.theme = settings.theme || state.theme;
+    if (typeof settings.muted === "boolean") state.muted = settings.muted;
+    state.typingStats = { ...defaultState.typingStats, ...(data.typing || {}) };
+    state.activeBoardId = settings.active_board_id && state.boards.some(board => board.id === settings.active_board_id) ? settings.active_board_id : state.boards[0]?.id || "moodboard";
+    ensureWorkspaceHistory();
+    setActiveBoard(state.activeBoardId);
+    state.moodboard = false;
+    workspaceTab = "write";
+    userHydrated = true;
+    hydratedUserId = requestUserId;
+    dirtyScopes.clear();
+    syncStatus = "synced";
+    document.documentElement.dataset.theme = state.theme;
+    updateFavicon(state.theme);
+    renderAll();
+    if (!pages.length && !boards.length && !rows.length && !Object.keys(settings).length && !Object.keys(data.typing || {}).length) return false;
+    return true;
+  }
+
+  async function trySupabaseSync() {
+    if (!supabaseConfig.enabled || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return false;
+    await supabaseRequest("PUT", await stateSyncPayload());
+    dirtyScopes.clear();
+    syncStatus = "synced";
+    updateSyncLabels();
+    return true;
+  }
+
   async function hydrateUserData(user) {
     if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !user) return;
     const requestId = ++hydrationRequestId;
@@ -964,6 +1035,13 @@
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
       hydratingUserId = requestUserId;
+      if (supabaseConfig.enabled) {
+        try {
+          if (await hydrateSupabaseUserData(user, requestId, requestUserId)) return;
+        } catch (supabaseError) {
+          console.error("Vex Supabase hydration failed; falling back to Firebase:", supabaseError);
+        }
+      }
       hydratedUserId = "";
       userHydrated = false;
       syncStatus = "loading your space";
@@ -1059,6 +1137,13 @@
 
   async function tryRemoteSync() {
     if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return;
+    if (supabaseConfig.enabled) {
+      try {
+        if (await trySupabaseSync()) return;
+      } catch (supabaseError) {
+        console.error("Vex Supabase sync failed; falling back to Firebase:", supabaseError);
+      }
+    }
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
