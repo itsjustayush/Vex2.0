@@ -1,5 +1,7 @@
 # Vex
 
+> **Created by Ayush Bhattacharya** · [GitHub profile](https://github.com/itsjustayush) · [Vex repository](https://github.com/itsjustayush/Vex2.0) · [info.cometlabs@gmail.com](mailto:info.cometlabs@gmail.com)
+
 Vex is a calm, colorful writing workspace prototype for notes, Markdown, LaTeX snippets, and endless moodboards. The current build intentionally keeps authentication paused while preserving the original Firebase and auth foundations for a later phase.
 
 ## Prototype features
