@@ -30,6 +30,10 @@
   let saveTimer = null;
   let toastTimer = null;
   const dirtyScopes = new Set(["page", "board", "settings", "typing"]);
+  const dirtyVersions = { page:0, board:0, settings:0, typing:0 };
+  let saveInFlight = false;
+  let saveQueued = false;
+  let savePromise = null;
   let activeView = window.location.hash === "#app" ? "app" : "landing";
   let workspaceTab = "write";
   let selectedMoodId = "";
@@ -106,21 +110,31 @@
     return data;
   }
 
-  async function stateSyncPayload() {
+  async function stateSyncPayload(scopes = new Set(["page", "board", "settings", "typing"])) {
     ensureWorkspaceHistory();
-    rememberCurrentPage();
-    rememberCurrentBoard();
-    const boardItems = {};
-    for (const board of state.boards) boardItems[board.id] = await Promise.all((state.boardItems[board.id] || []).slice(0, 500).map(item => prepareMoodItemForSync(item, firebaseUser.uid)));
-    return { pages:state.pages, boards:state.boards, board_items:boardItems, settings:{ theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId }, typing:state.typingStats };
+    const payload = {};
+    if (scopes.has("page")) {
+      rememberCurrentPage();
+      payload.pages = state.pages;
+    }
+    if (scopes.has("board")) {
+      rememberCurrentBoard();
+      const boardItems = {};
+      for (const board of state.boards) boardItems[board.id] = await Promise.all((state.boardItems[board.id] || []).slice(0, 500).map(item => prepareMoodItemForSync(item, firebaseUser.uid)));
+      payload.boards = state.boards;
+      payload.board_items = boardItems;
+    }
+    if (scopes.has("page") || scopes.has("board") || scopes.has("settings")) payload.settings = { theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId };
+    if (scopes.has("typing")) payload.typing = state.typingStats;
+    return payload;
   }
 
   function persist(scope = "all") {
     ensureWorkspaceHistory();
     if (scope === "page") rememberCurrentPage();
     if (scope === "board") rememberCurrentBoard();
-    if (scope === "all") ["page", "board", "settings", "typing"].forEach(name => dirtyScopes.add(name));
-    else dirtyScopes.add(scope);
+    const changedScopes = scope === "all" ? ["page", "board", "settings", "typing"] : [scope];
+    changedScopes.forEach(name => { dirtyScopes.add(name); dirtyVersions[name] += 1; });
     clearTimeout(saveTimer);
     if (!firebaseUser) {
       syncStatus = "guest · not saved";
@@ -129,7 +143,7 @@
     }
     syncStatus = "saving";
     updateSyncLabels();
-    saveTimer = setTimeout(() => { tryRemoteSync(); }, 260);
+    saveTimer = setTimeout(() => { runRemoteSync(); }, scope === "page" ? 120 : 220);
   }
 
   function escapeHtml(value) {
@@ -278,7 +292,7 @@
   async function signOut() {
     try {
       clearTimeout(saveTimer);
-      if (firebaseUser && userHydrated && hydratedUserId === firebaseUser.uid && dirtyScopes.size) await tryRemoteSync();
+      if (firebaseUser && userHydrated && hydratedUserId === firebaseUser.uid && dirtyScopes.size) await flushRemoteSync();
       hydrationRequestId += 1;
       if (authReady()) await firebase.auth().signOut();
       firebaseUser = null; userHydrated=false; hydratedUserId=""; hydratingUserId=""; dirtyScopes.clear(); selectedMoodId="";
@@ -1018,11 +1032,15 @@
     return true;
   }
 
-  async function trySupabaseSync() {
+  function clearSyncedScopes(scopes, versions) {
+    scopes.forEach(scope => { if (dirtyVersions[scope] === versions.get(scope)) dirtyScopes.delete(scope); });
+  }
+
+  async function trySupabaseSync(scopes, versions) {
     if (!supabaseConfig.enabled || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return false;
-    await supabaseRequest("PUT", await stateSyncPayload());
-    dirtyScopes.clear();
-    syncStatus = "synced";
+    await supabaseRequest("PUT", await stateSyncPayload(scopes));
+    clearSyncedScopes(scopes, versions);
+    syncStatus = dirtyScopes.size ? "saving" : "synced";
     updateSyncLabels();
     return true;
   }
@@ -1135,11 +1153,44 @@
     }
   }
 
+  function runRemoteSync() {
+    if (saveInFlight) { saveQueued = true; return savePromise || Promise.resolve(); }
+    saveInFlight = true;
+    saveQueued = false;
+    savePromise = tryRemoteSync().finally(() => {
+      saveInFlight = false;
+      savePromise = null;
+      if (saveQueued || dirtyScopes.size) {
+        saveQueued = false;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(runRemoteSync, 140);
+      }
+    });
+    return savePromise;
+  }
+
+  async function flushRemoteSync() {
+    clearTimeout(saveTimer);
+    while (dirtyScopes.size) {
+      if (saveInFlight) {
+        await (savePromise || Promise.resolve());
+      } else {
+        await runRemoteSync();
+      }
+      if (saveInFlight) continue;
+      if (!dirtyScopes.size) break;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
   async function tryRemoteSync() {
     if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return;
+    const scopes = new Set(dirtyScopes);
+    if (!scopes.size) return;
+    const versions = new Map([...scopes].map(scope => [scope, dirtyVersions[scope]]));
     if (supabaseConfig.enabled) {
       try {
-        if (await trySupabaseSync()) return;
+        if (await trySupabaseSync(scopes, versions)) return;
       } catch (supabaseError) {
         console.error("Vex Supabase sync failed; falling back to Firebase:", supabaseError);
       }
@@ -1150,8 +1201,6 @@
       firebaseStorage = window.firebase.storage ? firebase.storage() : null;
       const uid = firebaseUser.uid;
       const now = new Date().toISOString();
-      const scopes = new Set(dirtyScopes);
-      if (!scopes.size) return;
       const writes = [{ path:`users/${uid}`, data:{ uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 } }];
       if (scopes.has("page")) {
         rememberCurrentPage();
@@ -1172,8 +1221,8 @@
         }
       }
       await firestoreRestBatchWrite(writes);
-      scopes.forEach(scope => dirtyScopes.delete(scope));
-      syncStatus = "synced"; updateSyncLabels();
+      clearSyncedScopes(scopes, versions);
+      syncStatus = dirtyScopes.size ? "saving" : "synced"; updateSyncLabels();
     } catch (error) {
       syncStatus = "sync paused · retrying";
       console.error("Vex named Firestore sync failed", error);
