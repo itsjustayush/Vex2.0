@@ -249,3 +249,28 @@ button, [role="button"] { cursor: pointer; }
 .moodboard { touch-action: none; }
 .moodboard::after { content: "scroll to zoom · drag empty space to pan"; position: absolute; left: 16px; bottom: 14px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--panel-solid) 76%, transparent); color: var(--muted); font: 10px "IBM Plex Mono", monospace; pointer-events: none; }
 @media (max-width: 620px) { .history-modal { padding: 23px 17px; }.history-row { grid-template-columns: 30px minmax(0,1fr); }.history-row time { display: none; } }
+
+/* Moodboard inspector */
+.moodboard-stage { padding-right: clamp(300px, 27vw, 390px); }
+.mood-inspector { position: absolute; top: 24px; right: clamp(16px, 2vw, 28px); bottom: 128px; width: min(320px, 25vw); min-width: 270px; overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 20px; background: color-mix(in srgb, var(--panel-solid) 92%, transparent); box-shadow: var(--shadow-small); z-index: 6; }
+.mood-inspector-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--muted); }
+.inspector-orbit { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 14px; border: 1px dashed var(--accent); border-radius: 50%; color: var(--accent); font-size: 22px; }
+.mood-inspector-empty strong { color: var(--ink); font-family: "Space Grotesk", sans-serif; font-size: 18px; }
+.mood-inspector-empty p { max-width: 190px; margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+.inspector-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+.inspector-head .side-label { margin: 0 0 4px; }
+.inspector-head strong { font-family: "Space Grotesk", sans-serif; font-size: 19px; }
+.inspector-preview { display: flex; flex-direction: column; gap: 8px; min-height: 76px; margin-bottom: 17px; padding: 14px; border-radius: 14px; color: #3d3627; }
+.inspector-preview.yellow { background: #fff2a7; }.inspector-preview.pink { background: #ffd4dc; }.inspector-preview.blue { background: #cde7ff; }.inspector-preview.green { background: #d9efbf; }
+.inspector-preview strong { font-family: "Space Grotesk", sans-serif; }.inspector-preview span { font-size: 12px; line-height: 1.4; }
+.inspector-label { display: block; margin: 0 0 13px; color: var(--muted); font: 10px "IBM Plex Mono", monospace; letter-spacing: .09em; text-transform: uppercase; }
+.inspector-label input, .inspector-label textarea, .inspector-label select { display: block; width: 100%; margin-top: 7px; padding: 10px 11px; border: 1px solid var(--line-strong); border-radius: 10px; outline: none; background: var(--bg); color: var(--ink); font: 13px/1.4 "DM Sans", sans-serif; text-transform: none; letter-spacing: 0; resize: vertical; }
+.inspector-label input:focus, .inspector-label textarea:focus, .inspector-label select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inspector-control { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 0; color: var(--muted); font: 10px "IBM Plex Mono", monospace; letter-spacing: .09em; text-transform: uppercase; }
+.color-options, .style-options { display: flex; align-items: center; gap: 7px; }
+.color-dot { width: 23px; height: 23px; padding: 0; border: 2px solid transparent; border-radius: 50%; }.color-dot.active { border-color: var(--ink); box-shadow: 0 0 0 2px var(--panel-solid); }.color-dot.yellow { background: #fff2a7; }.color-dot.pink { background: #ffd4dc; }.color-dot.blue { background: #cde7ff; }.color-dot.green { background: #d9efbf; }
+.style-options button { min-width: 28px; height: 27px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted); font: 11px "IBM Plex Mono", monospace; }.style-options button.active, .style-options button:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.danger-btn { width: 100%; margin-top: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, #d45b55 40%, var(--line)); border-radius: 10px; background: transparent; color: #c75b55; font-size: 12px; }.danger-btn:hover { background: color-mix(in srgb, #d45b55 12%, transparent); }
+.mood-note.selected, .mood-image.selected { outline: 3px solid var(--accent); outline-offset: 5px; }
+@media (max-width: 1050px) { .moodboard-stage { padding-right: 330px; }.mood-inspector { width: 290px; min-width: 290px; } }
+@media (max-width: 820px) { .moodboard-stage { padding-right: 16px; padding-bottom: 255px; }.mood-inspector { position: fixed; top: auto; right: 12px; left: 12px; bottom: 205px; width: auto; min-width: 0; max-height: 42vh; z-index: 12; }.mood-inspector-empty { min-height: 110px; }.mood-inspector-empty .inspector-orbit { display: none; } }
