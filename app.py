@@ -6,7 +6,7 @@ import hmac
 import hashlib
 import base64
 from functools import wraps
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, Response
 from dotenv import load_dotenv
 import requests
 
@@ -342,6 +342,24 @@ def render_page(template_name):
 @app.route("/")
 def index():
     return render_page("index.html")
+
+def public_site_url():
+    return os.getenv("VEX_SITE_URL", request.url_root.rstrip("/")).rstrip("/")
+
+@app.route("/robots.txt")
+def robots_txt():
+    body = "User-agent: *\\nAllow: /\\nDisallow: /api/\\nDisallow: /login\\nDisallow: /dashboard\\nDisallow: /settings\\nDisallow: /status\\nDisallow: /docs\\n\\nSitemap: " + public_site_url() + "/sitemap.xml\\n"
+    return Response(body, mimetype="text/plain")
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>' + public_site_url() + '</loc><changefreq>monthly</changefreq><priority>1.0</priority></url></urlset>\n'
+    return Response(body, mimetype="application/xml")
+
+@app.route("/.well-known/security.txt")
+def security_txt():
+    body = "Contact: mailto:info.cometlabs@gmail.com\\nPreferred-Languages: en\\nCanonical: " + public_site_url() + "/.well-known/security.txt\\nPolicy: " + public_site_url() + "/SECURITY.md\\nExpires: 2027-08-19T00:00:00.000Z\\n"
+    return Response(body, mimetype="text/plain")
 
 @app.route("/login")
 def login():

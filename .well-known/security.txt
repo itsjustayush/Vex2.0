@@ -1,0 +1,5 @@
+Contact: mailto:info.cometlabs@gmail.com
+Preferred-Languages: en
+Canonical: https://vex2-0.vercel.app/.well-known/security.txt
+Policy: https://vex2-0.vercel.app/SECURITY.md
+Expires: 2027-08-19T00:00:00.000Z

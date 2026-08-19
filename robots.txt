@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /login
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /status
+Disallow: /docs
+
+Sitemap: https://vex2-0.vercel.app/sitemap.xml

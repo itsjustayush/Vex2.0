@@ -353,7 +353,7 @@
   }
 
   function renderEditor() {
-    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" /><div class="editor-tools"><button class="pill-btn" data-action="export-page">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>Today · just now</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-content" contenteditable="true" spellcheck="true" data-placeholder="Start with a sentence, a question, or a tiny spark…">${formatPreview(state.content)}</div></div>${renderFormatBar()}</section>`;
+    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" /><div class="editor-tools"><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>Today · just now</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-content" contenteditable="true" spellcheck="true" data-placeholder="Start with a sentence, a question, or a tiny spark…">${formatPreview(state.content)}</div></div>${renderFormatBar()}</section>`;
   }
 
   function renderMoodboard() {
@@ -371,7 +371,7 @@
   }
 
   function renderLanding() {
-    document.getElementById("app").innerHTML = `<div class="landing"><div class="landing-shell">${renderTopbar("landing")}<main><section class="landing-hero"><span class="eyebrow"><b>✦</b> writing, notes & moodboards</span><h1>Make room for <em>good</em> thoughts.</h1><p class="landing-subtitle">A calm, colorful workspace for the thoughts that refuse to sit still. Write in full flow, pin the fragments, and let the connections appear.</p><div class="landing-cta"><button class="primary-btn" data-action="open-app">Start writing ${icon("arrow")}</button><button class="ghost-btn" data-action="scroll-demo">See the workspace <span>↓</span></button></div></section><section class="demo-wrap" id="demo"><div class="demo-frame"><div id="demo-host"></div></div></section><section class="landing-bento"><article class="feature-card"><div class="feature-icon">✺</div><h3>Thoughts, not folders.</h3><p>Start with a blank page, choose a texture, and make your own little corner of the internet.</p></article><article class="feature-card"><div class="feature-icon">⌘</div><h3>Markdown native.</h3><p>Formatting, LaTeX, shortcuts, and a gentle keyboard that makes writing feel tactile.</p></article><article class="feature-card"><div class="feature-icon">◌</div><h3>Endless moodboards.</h3><p>Drop in images, videos, notes, and references without fighting the canvas.</p></article><article class="feature-card"><div class="feature-icon">≈</div><h3>Three moods.</h3><p>Light, dark, and zen. The room changes when you do.</p></article><article class="feature-card"><div class="feature-icon">↗</div><h3>Write freely.</h3><p>Explore as a guest in memory, then sign in when you are ready to save and sync your space.</p></article></section></main><footer class="landing-footer"><span>© 2026 Vex. Think in full color.</span><span class="creator-credit">Created by <a href="https://github.com/itsjustayush" target="_blank" rel="noreferrer">Ayush Bhattacharya</a> · <a href="mailto:info.cometlabs@gmail.com">info.cometlabs@gmail.com</a></span><a class="github-badge" href="https://github.com/itsjustayush/Vex2.0" target="_blank" rel="noreferrer" aria-label="View Vex on GitHub"><span aria-hidden="true">◉</span> Vex on GitHub ↗</a></footer></div></div>`;
+    document.getElementById("app").innerHTML = `<div class="landing"><div class="landing-shell">${renderTopbar("landing")}<main><section class="landing-hero"><span class="eyebrow"><b>✦</b> writing, notes & moodboards</span><h1>Make room for <em>good</em> thoughts.</h1><p class="landing-subtitle">A calm, colorful workspace for the thoughts that refuse to sit still. Write in full flow, pin the fragments, and let the connections appear.</p><div class="landing-cta"><button class="primary-btn" data-action="open-app">Start writing ${icon("arrow")}</button><button class="ghost-btn" data-action="scroll-demo">See the workspace <span>↓</span></button></div></section><section class="demo-wrap" id="demo"><div class="demo-frame"><div id="demo-host"></div></div></section><section class="landing-bento"><article class="feature-card"><div class="feature-icon">✺</div><h3>Thoughts, not folders.</h3><p>Start with a blank page, choose a texture, and make your own little corner of the internet.</p></article><article class="feature-card"><div class="feature-icon">⌘</div><h3>Markdown native.</h3><p>Formatting, LaTeX, shortcuts, and a gentle keyboard that makes writing feel tactile.</p></article><article class="feature-card"><div class="feature-icon">◌</div><h3>Endless moodboards.</h3><p>Drop in images, videos, notes, and references without fighting the canvas.</p></article><article class="feature-card"><div class="feature-icon">≈</div><h3>Three moods.</h3><p>Light, dark, and zen. The room changes when you do.</p></article><article class="feature-card"><div class="feature-icon">↗</div><h3>Write freely.</h3><p>Explore as a guest in memory, then sign in when you are ready to save and sync your space.</p></article></section></main><footer class="landing-footer"><span>© 2026 Vex. Think in full color.</span><span class="creator-credit">Created by <a href="https://github.com/itsjustayush" target="_blank" rel="noreferrer">Ayush Bhattacharya</a> · <a href="mailto:info.cometlabs@gmail.com">info.cometlabs@gmail.com</a></span><span class="inspiration-credit">Inspired by <a href="https://keythm.aayushbharti.in/" target="_blank" rel="noreferrer">keythm.aayushbharti.in</a></span><a class="github-badge" href="https://github.com/itsjustayush/Vex2.0" target="_blank" rel="noreferrer" aria-label="View Vex on GitHub"><span aria-hidden="true">◉</span> Vex on GitHub ↗</a></footer></div></div>`;
     const demoHost = document.getElementById("demo-host");
     mountWorkspace(demoHost, { embedded: true });
     document.querySelectorAll("[data-action='scroll-demo']").forEach(btn => btn.addEventListener("click", () => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })));
@@ -418,7 +418,8 @@
     root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
     root.querySelectorAll("[data-action='add-note']").forEach(btn => btn.addEventListener("click", () => { state.mood.push({ id:"m" + Date.now(), type:"note", color:["yellow","pink","blue","green"][state.mood.length % 4], x:180 + state.mood.length * 48, y:160 + state.mood.length * 35, title:"new thought", text:"Double-click to make this yours." }); persist("board"); renderAll(); }));
-    root.querySelectorAll("[data-action='export-page']").forEach(btn => btn.addEventListener("click", exportPage));
+    root.querySelectorAll("[data-action='share-note']").forEach(btn => btn.addEventListener("click", shareNote));
+    root.querySelectorAll("[data-action='export-page']").forEach(btn => btn.addEventListener("click", showExportMenu));
     root.querySelectorAll("[data-action='preview-markdown']").forEach(btn => btn.addEventListener("click", () => showToast("Markdown is rendered live as you type")));
     root.querySelectorAll(".page-title:not([readonly])").forEach(input => input.addEventListener("input", e => { state.title = e.target.value; persist("page"); }));
     const editor = root.querySelector(".editor-content");
@@ -465,9 +466,73 @@
     state.content = editorToMarkdown(editor); persist("page");
   }
 
-  function exportPage() {
-    const blob = new Blob([`# ${state.title}\n\n${state.content}`], { type:"text/markdown" });
-    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=(state.title || "vex-page").toLowerCase().replace(/\s+/g,"-") + ".md"; a.click(); URL.revokeObjectURL(url); showToast("Markdown page exported");
+  function noteText() {
+    return `# ${state.title || "Untitled page"}\n\n${state.content || ""}`.trim() + "\n";
+  }
+
+  function fileStem() {
+    return (state.title || "vex-page").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "vex-page";
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  }
+
+  function exportMarkdown() {
+    downloadBlob(new Blob([noteText()], { type:"text/markdown;charset=utf-8" }), `${fileStem()}.md`);
+    showToast("Markdown downloaded");
+  }
+
+  function exportText() {
+    downloadBlob(new Blob([noteText()], { type:"text/plain;charset=utf-8" }), `${fileStem()}.txt`);
+    showToast("Text file downloaded");
+  }
+
+  function exportPdf() {
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!popup) { showToast("Allow pop-ups to save a PDF"); return; }
+    const printable = escapeHtml(noteText()).replace(/\n/g, "<br>");
+    popup.document.write(`<!doctype html><html><head><title>${escapeHtml(state.title || "Vex note")}</title><style>body{font-family:Georgia,serif;max-width:760px;margin:64px auto;padding:0 32px;color:#25221e;line-height:1.75}h1{font-family:Arial,sans-serif;line-height:1.1;border-bottom:1px solid #ddd;padding-bottom:16px}@media print{body{margin:24px auto}}</style></head><body><h1>${escapeHtml(state.title || "Untitled page")}</h1><div>${printable.replace(/^# [^<]*<br>/, "")}</div><script>window.onload=()=>{window.print();};<\/script></body></html>`);
+    popup.document.close();
+    showToast("Print dialog opened — choose Save as PDF");
+  }
+
+  async function shareNote() {
+    const shareData = { title: state.title || "Vex note", text: noteText(), url: window.location.href };
+    try {
+      if (navigator.share) { await navigator.share(shareData); showToast("Note shared"); return; }
+      await navigator.clipboard.writeText(noteText());
+      showToast("Note copied to clipboard");
+    } catch (_) { showToast("Sharing was cancelled"); }
+  }
+
+  async function openGoogleDocs() {
+    try { await navigator.clipboard.writeText(noteText()); } catch (_) {}
+    window.open("https://docs.new", "_blank", "noopener,noreferrer");
+    showToast("Copied — paste your note into Google Docs");
+  }
+
+  function showExportMenu() {
+    const existing = document.querySelector(".export-menu");
+    if (existing) { existing.remove(); return; }
+    const anchor = document.querySelector("[data-action='export-page']");
+    if (!anchor) return;
+    const menu = document.createElement("div");
+    menu.className = "export-menu";
+    menu.innerHTML = `<button data-export="markdown">Download Markdown <span>.md</span></button><button data-export="text">Download text <span>.txt</span></button><button data-export="pdf">Print / save PDF <span>.pdf</span></button><button data-export="docs">Open Google Docs <span>paste</span></button>`;
+    anchor.parentElement.appendChild(menu);
+    menu.querySelector("[data-export='markdown']").addEventListener("click", () => { menu.remove(); exportMarkdown(); });
+    menu.querySelector("[data-export='text']").addEventListener("click", () => { menu.remove(); exportText(); });
+    menu.querySelector("[data-export='pdf']").addEventListener("click", () => { menu.remove(); exportPdf(); });
+    menu.querySelector("[data-export='docs']").addEventListener("click", () => { menu.remove(); openGoogleDocs(); });
+    setTimeout(() => document.addEventListener("click", e => { if (!menu.contains(e.target) && e.target !== anchor) menu.remove(); }, { once:true }), 0);
   }
 
   function handleFiles(files) {
