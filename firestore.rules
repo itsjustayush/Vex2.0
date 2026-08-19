@@ -44,6 +44,10 @@ service cloud.firestore {
         allow read, create, update: if isOwner(userId);
         allow delete: if isOwner(userId);
       }
+      match /typing/{typingDoc} {
+        allow read, create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
     }
 
     // OTP challenge records are server-only. The Flask backend uses Firebase Admin credentials.

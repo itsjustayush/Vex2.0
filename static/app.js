@@ -9,6 +9,7 @@
     muted: false,
     title: "A softer place to think",
     content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful.\n\n**Try typing** with the keyboard below, or switch to a moodboard when words need a little more space.\n\n`Inline code` · $E = mc^2$",
+    typingStats: { completed: 0, bestWpm: 0, bestAccuracy: 0, lastWpm: 0, lastAccuracy: 0, streak: 0 },
     mood: [
       { id: "m1", type: "note", color: "yellow", x: 170, y: 110, title: "small sparks", text: "Collect the tiny things before they disappear." },
       { id: "m2", type: "note", color: "pink", x: 460, y: 250, title: "make it playful", text: "A good system should feel like an invitation, not a chore." },
@@ -19,8 +20,11 @@
   let state = loadState();
   let saveTimer = null;
   let toastTimer = null;
-  const dirtyScopes = new Set(["page", "board", "settings"]);
+  const dirtyScopes = new Set(["page", "board", "settings", "typing"]);
   let activeView = window.location.hash === "#app" ? "app" : "landing";
+  let workspaceTab = "write";
+  let typingSession = { exerciseId: "home-row", visibleLength: 0, ready: false, value: "", errors: 0, startedAt: 0, finished: false };
+  let typingAnimationTimer = null;
   let syncStatus = "guest · not saved";
   let firebaseDb = null;
   let firebaseStorage = null;
@@ -324,6 +328,69 @@
     return scratch.textContent.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  const typingExercises = [
+    { id:"home-row", level:"warm up", title:"Home row drift", text:"asdf jkl; asdf jkl; keep your hands light and let the rhythm settle." },
+    { id:"soft-focus", level:"focus", title:"Soft focus", text:"Small steps become a practice when you return to them with care." },
+    { id:"clear-thoughts", level:"flow", title:"Clear thoughts", text:"Write the next true sentence before you decide whether it is good." },
+    { id:"tiny-sprint", level:"sprint", title:"Tiny sprint", text:"A little momentum is enough to make the blank page feel friendly." }
+  ];
+
+  function currentTypingExercise() { return typingExercises.find(exercise => exercise.id === typingSession.exerciseId) || typingExercises[0]; }
+
+  function resetTypingSession(exerciseId = typingSession.exerciseId) {
+    clearInterval(typingAnimationTimer);
+    typingSession = { exerciseId, visibleLength: 0, ready: false, value: "", errors: 0, startedAt: 0, finished: false };
+    const exercise = currentTypingExercise();
+    typingAnimationTimer = setInterval(() => {
+      typingSession.visibleLength = Math.min(exercise.text.length, typingSession.visibleLength + 2);
+      if (typingSession.visibleLength >= exercise.text.length) {
+        clearInterval(typingAnimationTimer);
+        typingSession.ready = true;
+        const input = document.querySelector("[data-typing-input]");
+        if (input) { input.disabled = false; setTimeout(() => input.focus(), 80); }
+      }
+      const prompt = document.querySelector("[data-typing-prompt]");
+      if (prompt) prompt.innerHTML = typingPromptMarkup(exercise.text, typingSession.value, typingSession.visibleLength);
+    }, 26);
+  }
+
+  function typingPromptMarkup(text, value = "", visibleLength = text.length) {
+    const visible = text.slice(0, visibleLength);
+    return [...visible].map((character, index) => {
+      const typed = value[index];
+      const className = typed == null ? "" : typed === character ? "typed-correct" : "typed-error";
+      return `<span class="typing-char ${className}">${character === " " ? "·" : escapeHtml(character)}</span>`;
+    }).join("");
+  }
+
+  function typingProgress() {
+    const exercise = currentTypingExercise();
+    return Math.min(100, Math.round((typingSession.value.length / exercise.text.length) * 100));
+  }
+
+  function finishTypingExercise() {
+    if (typingSession.finished) return;
+    const exercise = currentTypingExercise();
+    const elapsedMinutes = Math.max((Date.now() - typingSession.startedAt) / 60000, 1 / 60);
+    const correct = [...exercise.text].reduce((total, character, index) => total + (typingSession.value[index] === character ? 1 : 0), 0);
+    const accuracy = Math.round((correct / exercise.text.length) * 100);
+    const wpm = Math.max(1, Math.round((exercise.text.length / 5) / elapsedMinutes));
+    state.typingStats = { ...(state.typingStats || defaultState.typingStats), completed:(state.typingStats?.completed || 0) + 1, bestWpm:Math.max(state.typingStats?.bestWpm || 0, wpm), bestAccuracy:Math.max(state.typingStats?.bestAccuracy || 0, accuracy), lastWpm:wpm, lastAccuracy:accuracy, streak:(state.typingStats?.streak || 0) + 1 };
+    typingSession.finished = true;
+    typingSession.ready = true;
+    persist("typing");
+    const input = document.querySelector("[data-typing-input]");
+    if (input) input.disabled = true;
+    showToast(`${wpm} WPM · ${accuracy}% accuracy`);
+    setTimeout(() => { if (workspaceTab === "typing") renderApp(); }, 550);
+  }
+
+  function renderTyping() {
+    const exercise = currentTypingExercise();
+    const stats = state.typingStats || defaultState.typingStats;
+    return `<section class="editor-stage typing-stage"><div class="editor-head"><div><span class="eyebrow"><b>✦</b> enhance typing</span><h2 class="typing-heading">Practice the rhythm, not the rush.</h2></div><div class="editor-tools"><button class="pill-btn" data-action="reset-typing">↻ <span>New exercise</span></button></div></div><div class="typing-layout"><div class="typing-card"><div class="typing-card-top"><span>vex / typewriter</span><span>${escapeHtml(exercise.level)}</span></div><div class="typing-prompt" data-typing-prompt>${typingPromptMarkup(exercise.text, typingSession.value, typingSession.visibleLength || exercise.text.length)}</div><input class="typing-input" data-typing-input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the sentence above…" aria-label="Typing exercise input" ${typingSession.ready ? "" : "disabled"} value="${escapeHtml(typingSession.value)}" /><div class="typing-progress"><span style="width:${typingProgress()}%"></span></div><div class="typing-actions"><span>${typingSession.ready ? "Your turn." : "Setting the page…"}</span><span>${typingProgress()}%</span></div></div><aside class="typing-stats"><p class="side-label">your rhythm</p><div class="stat-grid"><div><strong>${stats.bestWpm || 0}</strong><span>best wpm</span></div><div><strong>${stats.bestAccuracy || 0}%</strong><span>best accuracy</span></div><div><strong>${stats.completed || 0}</strong><span>completed</span></div><div><strong>${stats.streak || 0}</strong><span>streak</span></div></div><p class="typing-note">${firebaseUser ? "Your progress is private to this account and syncs across devices." : "Try it freely. Sign in when you want Vex to remember your progress."}</p>${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save progress ↗</button>` : ""}</aside></div><div class="typing-exercises"><p class="side-label">choose a feeling</p>${typingExercises.map(item => `<button class="exercise-chip ${item.id === exercise.id ? "active" : ""}" data-action="select-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.level)}</small></button>`).join("")}</div></section>`;
+  }
+
   function pageClass() { return state.pageType; }
 
   function renderTopbar(mode = "workspace") {
@@ -346,8 +413,9 @@
     return `<aside class="sidebar"><div class="sidebar-inner">
       <button class="primary-btn new-page" data-action="new-page">${icon("plus")} New page</button>
       <div class="side-section"><p class="side-label">your space</p>
-        <button class="side-item active" data-action="focus-editor"><span class="item-icon">${icon("note")}</span><span>Daily notes</span><small>⌘1</small></button>
-        <button class="side-item" data-action="switch-moodboard"><span class="item-icon">${icon("board")}</span><span>Moodboard</span><small>⌘2</small></button>
+        <button class="side-item ${workspaceTab === "write" && !state.moodboard ? "active" : ""}" data-action="focus-editor"><span class="item-icon">${icon("note")}</span><span>Daily notes</span><small>⌘1</small></button>
+        <button class="side-item ${state.moodboard ? "active" : ""}" data-action="switch-moodboard"><span class="item-icon">${icon("board")}</span><span>Moodboard</span><small>⌘2</small></button>
+        <button class="side-item ${workspaceTab === "typing" ? "active" : ""}" data-action="switch-typing"><span class="item-icon">⌁</span><span>Enhance typing</span><small>⌘3</small></button>
         <button class="side-item" data-action="coming-soon"><span class="item-icon">${icon("folder")}</span><span>All pages</span><small>3</small></button>
       </div>
       <div class="side-section"><p class="side-label">page style</p>
@@ -355,7 +423,7 @@
         <button class="side-item" data-action="set-page-type" data-value="dotted-light"><span class="item-icon">⠿</span><span>Dotted · light</span></button>
         <button class="side-item" data-action="set-page-type" data-value="dotted-dense"><span class="item-icon">⠿</span><span>Dotted · dense</span></button>
       </div>
-      <div class="side-note ${firebaseUser ? "side-note-auth" : "side-note-guest"}"><strong>${firebaseUser ? "Synced by Firebase" : "Guest mode · not saved"}</strong>${firebaseUser ? "Your pages are stored in your private Vex space and sync across devices." : "Write and explore freely. Sign in or sign up before leaving to save your pages and sync them across devices."}${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save ↗</button>` : ""}</div>
+      <div class="side-note ${firebaseUser ? "side-note-auth" : "side-note-guest"}"><strong>Built with love ♥ by <a href="https://github.com/itsjustayush" target="_blank" rel="noreferrer">Ayush</a></strong>${firebaseUser ? `Your private space is synced for ${escapeHtml(firebaseUser.email || "your account")}.` : "Write and explore freely. Sign in or sign up before leaving to save your pages and sync them across devices."}${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save ↗</button>` : ""}</div>
     </div></aside>`;
   }
 
@@ -413,9 +481,11 @@
   }
 
   function renderApp() {
-    document.getElementById("app").innerHTML = `<div class="app-shell"><div>${renderTopbar("workspace")}</div><div class="workspace">${renderSidebar()}${state.moodboard ? renderMoodboard() : renderEditor()}</div>${renderKeyboard()}</div>`;
+    const mainView = workspaceTab === "typing" ? renderTyping() : state.moodboard ? renderMoodboard() : renderEditor();
+    document.getElementById("app").innerHTML = `<div class="app-shell"><div>${renderTopbar("workspace")}</div><div class="workspace">${renderSidebar()}${mainView}</div>${renderKeyboard()}</div>`;
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(document.getElementById("app"));
+    if (workspaceTab === "typing" && !typingSession.ready) resetTypingSession(typingSession.exerciseId);
   }
 
   function renderAll() { activeView === "landing" ? renderLanding() : renderApp(); }
@@ -442,9 +512,12 @@
       workspace?.classList.toggle("sidebar-hidden");
       root.querySelector(".app-shell")?.classList.toggle("sidebar-open");
     }));
-    root.querySelectorAll("[data-action='focus-editor']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = false; renderApp(); setTimeout(() => document.querySelector(".editor-content")?.focus(), 50); }));
-    root.querySelectorAll("[data-action='switch-moodboard']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = true; renderApp(); }));
-    root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = false; state.title = "Untitled page"; state.content = ""; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
+    root.querySelectorAll("[data-action='focus-editor']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; renderApp(); setTimeout(() => document.querySelector(".editor-content")?.focus(), 50); }));
+    root.querySelectorAll("[data-action='switch-moodboard']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = true; renderApp(); }));
+    root.querySelectorAll("[data-action='switch-typing']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "typing"; state.moodboard = false; resetTypingSession("home-row"); renderApp(); }));
+    root.querySelectorAll("[data-action='reset-typing']").forEach(btn => btn.addEventListener("click", () => { resetTypingSession(typingSession.exerciseId); renderApp(); }));
+    root.querySelectorAll("[data-action='select-exercise']").forEach(btn => btn.addEventListener("click", () => { typingSession.exerciseId = btn.dataset.exerciseId; resetTypingSession(btn.dataset.exerciseId); renderApp(); }));
+    root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; state.title = "Untitled page"; state.content = ""; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
     root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist("page"); renderAll(); }));
     root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
@@ -456,6 +529,23 @@
     root.querySelectorAll("[data-action='export-page']").forEach(btn => btn.addEventListener("click", showExportMenu));
     root.querySelectorAll("[data-action='preview-markdown']").forEach(btn => btn.addEventListener("click", () => showToast("Markdown is rendered live as you type")));
     root.querySelectorAll(".page-title:not([readonly])").forEach(input => input.addEventListener("input", e => { state.title = e.target.value; persist("page"); }));
+    const typingInput = root.querySelector("[data-typing-input]");
+    if (typingInput) {
+      typingInput.addEventListener("input", e => {
+        const exercise = currentTypingExercise();
+        typingSession.value = e.target.value.slice(0, exercise.text.length);
+        if (!typingSession.startedAt && typingSession.value.length) typingSession.startedAt = Date.now();
+        typingSession.errors = [...typingSession.value].reduce((total, character, index) => total + (character !== exercise.text[index] ? 1 : 0), 0);
+        e.target.value = typingSession.value;
+        const prompt = root.querySelector("[data-typing-prompt]");
+        if (prompt) prompt.innerHTML = typingPromptMarkup(exercise.text, typingSession.value, exercise.text.length);
+        const progress = root.querySelector(".typing-progress span");
+        if (progress) progress.style.width = `${typingProgress()}%`;
+        const progressLabel = root.querySelector(".typing-actions span:last-child");
+        if (progressLabel) progressLabel.textContent = `${typingProgress()}%`;
+        if (typingSession.value.length >= exercise.text.length) finishTypingExercise();
+      });
+    }
     const editor = root.querySelector(".editor-content");
     if (editor) {
       editor.addEventListener("input", () => { state.content = editorToMarkdown(editor); persist("page"); });
@@ -591,6 +681,7 @@
   function userRoot(uid) { return firebaseDb.collection("users").doc(uid); }
   function userPage(uid) { return userRoot(uid).collection("pages").doc("daily-notes"); }
   function userBoard(uid) { return userRoot(uid).collection("boards").doc("moodboard"); }
+  function userTyping(uid) { return userRoot(uid).collection("typing").doc("stats"); }
 
   function serializableMoodItem(item) {
     const safe = { ...item };
@@ -622,11 +713,12 @@
       userHydrated = false;
       syncStatus = "loading your space";
       updateSyncLabels();
-      const [pageSnap, settingsSnap, boardSnap, itemsSnap] = await Promise.all([
+      const [pageSnap, settingsSnap, boardSnap, itemsSnap, typingSnap] = await Promise.all([
         userPage(user.uid).get(),
         userRoot(user.uid).collection("settings").doc("preferences").get(),
         userBoard(user.uid).get(),
-        userBoard(user.uid).collection("items").orderBy("updated_at", "desc").limit(200).get()
+        userBoard(user.uid).collection("items").orderBy("updated_at", "desc").limit(200).get(),
+        userTyping(user.uid).get()
       ]);
       if (pageSnap.exists) {
         const page = pageSnap.data();
@@ -640,13 +732,14 @@
         if (typeof settings.muted === "boolean") state.muted = settings.muted;
       }
       if (itemsSnap.size) state.mood = itemsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+      if (typingSnap.exists) state.typingStats = { ...defaultState.typingStats, ...typingSnap.data() };
       if (boardSnap.exists) state.moodboard = true;
       userHydrated = true;
       syncStatus = "synced";
       document.documentElement.dataset.theme = state.theme;
       updateFavicon(state.theme);
       renderAll();
-      if (!pageSnap.exists && !boardSnap.exists && !settingsSnap.exists && !itemsSnap.size) await tryRemoteSync();
+      if (!pageSnap.exists && !boardSnap.exists && !settingsSnap.exists && !itemsSnap.size && !typingSnap.exists) await tryRemoteSync();
     } catch (_) {
       userHydrated = true;
       syncStatus = "signed in · retrying sync";
@@ -668,6 +761,7 @@
       batch.set(userRoot(uid), { uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 }, { merge:true });
       if (scopes.has("page")) batch.set(userPage(uid), { page_id:"daily-notes", title:state.title, content:state.content, page_type:state.pageType, updated_at:now, schema_version:1 }, { merge:true });
       if (scopes.has("settings")) batch.set(userRoot(uid).collection("settings").doc("preferences"), { theme:state.theme, muted:state.muted, updated_at:now, schema_version:1 }, { merge:true });
+      if (scopes.has("typing")) batch.set(userTyping(uid), { ...state.typingStats, updated_at:now, schema_version:1 }, { merge:true });
       if (scopes.has("board")) {
         const moodItems = await Promise.all(state.mood.slice(0, 450).map(item => prepareMoodItemForSync(item, uid)));
         batch.set(userBoard(uid), { board_id:"moodboard", title:"Moodboard", item_count:state.mood.length, updated_at:now, schema_version:1 }, { merge:true });
@@ -699,6 +793,10 @@
         } else {
           userHydrated = false;
           hydratingUserId = "";
+          state = cloneState(defaultState);
+          workspaceTab = "write";
+          clearInterval(typingAnimationTimer);
+          typingSession = { exerciseId:"home-row", visibleLength:0, ready:false, value:"", errors:0, startedAt:0, finished:false };
           syncStatus = "guest · not saved";
           if (activeView) renderAll();
         }
@@ -714,8 +812,9 @@
       pressedCodes.add(e.code);
       if (!e.repeat) playKeySound(e);
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === "1") { e.preventDefault(); state.moodboard=false; renderApp(); }
-    if ((e.metaKey || e.ctrlKey) && e.key === "2") { e.preventDefault(); state.moodboard=true; renderApp(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === "1") { e.preventDefault(); workspaceTab="write"; state.moodboard=false; renderApp(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === "2") { e.preventDefault(); workspaceTab="write"; state.moodboard=true; renderApp(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === "3") { e.preventDefault(); workspaceTab="typing"; state.moodboard=false; resetTypingSession("home-row"); renderApp(); }
   });
 
   document.addEventListener("keyup", e => {

@@ -20,9 +20,11 @@ Vex’s six-digit email verification uses a server-side transactional email serv
 
 The backend also requires Firebase Admin credentials in `FIREBASE_SERVICE_ACCOUNT_KEY` so a verified OTP can create or sign in a Firebase user and issue a Firebase custom token. Firestore stores only a hashed OTP challenge under the server-only `otp_challenges` collection; the browser cannot read or write those documents. Set `OTP_SECRET`, `OTP_TTL_SECONDS`, `OTP_RESEND_COOLDOWN_SECONDS`, and `OTP_MAX_ATTEMPTS` in the deployment secret store. The full variable list is in `.env.example`.
 
-The minimum production services are therefore Resend for delivery, a verified domain and DNS provider for sender authentication, Firebase Authentication for the user identity, Firebase Admin SDK credentials for custom-token sign-in, and Firestore for short-lived hashed challenge records. A deployment secret manager is required to hold these credentials securely.
+The minimum production services are therefore Resend for delivery, a verified domain and DNS provider for sender authentication, Firebase Authentication for the user identity, Firebase Admin SDK credentials for custom-token sign-in, and Firestore for short-lived hashed challenge records. A deployment secret manager is required to hold these credentials securely. Gmail is available in the connected workspace for interactive, user-confirmed messages, but it is not used as the app’s unattended OTP backend; reliable per-user delivery requires a server-side provider such as Resend with a secret stored in the deployment environment.
 
 The email template is defined in `email_templates.py` and includes the Vex mark, six-digit code, expiry, security notice, and Ayush Bhattacharya attribution. The OTP API is exposed through `/api/auth/request-otp` and `/api/auth/verify-otp`.
+
+The **Enhance Typing** tab provides typewriter-style exercises, a progressive prompt animation, live correctness feedback, WPM and accuracy calculations, exercise selection, and a personal streak. Typing progress is stored under `users/{uid}/typing/stats`, separate from every other account. Guests can practice in memory, but their progress is not persisted until authentication.
 
 ## Sharing and exports
 
