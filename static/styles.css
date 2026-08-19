@@ -274,3 +274,34 @@ button, [role="button"] { cursor: pointer; }
 .mood-note.selected, .mood-image.selected { outline: 3px solid var(--accent); outline-offset: 5px; }
 @media (max-width: 1050px) { .moodboard-stage { padding-right: 330px; }.mood-inspector { width: 290px; min-width: 290px; } }
 @media (max-width: 820px) { .moodboard-stage { padding-right: 16px; padding-bottom: 255px; }.mood-inspector { position: fixed; top: auto; right: 12px; left: 12px; bottom: 205px; width: auto; min-width: 0; max-height: 42vh; z-index: 12; }.mood-inspector-empty { min-height: 110px; }.mood-inspector-empty .inspector-orbit { display: none; } }
+
+/* Touch-first phone and tablet refinements */
+@media (max-width: 1100px) {
+  :root { --sidebar: 236px; }
+  .topbar { padding-inline: 20px; }
+  .editor-stage { padding-inline: 28px; }
+  .page-title { width: min(52vw, 520px); }
+  .keyboard-dock { width: min(680px, calc(100vw - var(--sidebar) - 24px)); }
+}
+@media (max-width: 820px) {
+  .topbar { height: 64px; padding-inline: 12px; }
+  .top-left { gap: 9px; }.crumb { display: none; }.top-actions { gap: 5px; }.top-actions .pill-btn { padding: 8px 9px; }.top-actions .pill-btn span, .top-actions .status { display: none; }
+  .workspace { height: calc(100svh - 64px); min-height: calc(100svh - 64px); grid-template-columns: 0 minmax(0, 1fr); }
+  .sidebar { position: fixed; top: 64px; bottom: 0; left: 0; width: min(286px, 86vw); z-index: 20; opacity: 0; transform: translateX(-102%); transition: transform .24s var(--ease), opacity .2s ease; box-shadow: 22px 0 50px rgba(0,0,0,.18); }
+  .sidebar-inner { width: 100%; padding-bottom: 180px; }.sidebar-open .sidebar { opacity: 1; transform: translateX(0); pointer-events: auto; }
+  .editor-stage { padding: 17px 12px 224px; overflow: auto; }
+  .editor-head { align-items: flex-start; gap: 10px; margin-bottom: 13px; }.page-title { width: min(58vw, 420px); font-size: clamp(23px, 6vw, 32px); }.editor-tools { flex-wrap: wrap; justify-content: flex-end; gap: 5px; }.editor-tools .pill-btn, .editor-tools .primary-btn { min-height: 36px; padding: 8px 10px; font-size: 11px; }
+  .page-meta { align-items: flex-start; flex-direction: column; gap: 9px; margin-bottom: 12px; }.page-switcher { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; scrollbar-width: none; }.page-switcher::-webkit-scrollbar { display: none; }.page-switcher button { flex: 0 0 auto; }
+  .page-card { min-height: 55vh; border-radius: 18px; }.editor-content { min-height: 55vh; padding: 26px 18px 42px; font-size: 15px; }
+  .format-bar { bottom: 184px; max-width: calc(100vw - 24px); overflow-x: auto; left: 12px; right: 12px; transform: none; justify-content: flex-start; scrollbar-width: none; }.format-bar::-webkit-scrollbar { display: none; }
+  .keyboard-dock { left: 50%; bottom: 8px; width: calc(100vw - 16px); }.keyboard-shell { padding: 8px 6px 7px; border-radius: 16px; transform: perspective(650px) rotateX(5deg); }.keyboard-top { padding-bottom: 5px; font-size: 8px; }.key-row { gap: 2px; margin-top: 3px; }.key { height: 25px; border-radius: 5px; font-size: 8px; }.key.wide-1 { flex: 1.35; }.key.wide-2 { flex: 1.75; }.key.space { flex: 4.2; }
+  .typing-stage { padding-bottom: 224px; }.typing-layout { gap: 11px; }.typing-card { min-height: 0; padding: 12px; border-radius: 17px; }.typing-prompt { min-height: 130px; padding: 18px 8px; font-size: clamp(17px, 5vw, 25px); line-height: 1.45; }.typing-input { min-height: 45px; font-size: 13px; }.mobile-typing-input { cursor: pointer; user-select: none; -webkit-user-select: none; caret-color: transparent; }.typing-stats { padding: 13px; }.stat-grid { gap: 6px; }.stat-grid div { padding: 9px; }.stat-grid strong { font-size: 20px; }.typing-exercises { padding-bottom: 84px; gap: 7px; }.exercise-chip { padding: 8px 9px; }
+  .moodboard-stage { padding-right: 12px; }.mood-inspector { bottom: 205px; max-height: 44vh; }.moodboard { min-height: 56vh; }.moodboard::after { bottom: 10px; left: 10px; font-size: 8px; }
+}
+@media (max-width: 520px) {
+  .brand { font-size: 17px; }.brand-mark { width: 29px; height: 29px; }.top-actions .icon-btn { width: 33px; height: 33px; }.top-actions .primary-btn { min-width: 33px; padding: 7px; }
+  .editor-head { flex-direction: column; }.page-title { width: 100%; }.editor-tools { width: 100%; justify-content: flex-start; }.editor-tools .pill-btn span, .editor-tools .primary-btn span { display: inline; }.editor-tools .pill-btn, .editor-tools .primary-btn { font-size: 10px; padding: 7px 9px; }
+  .page-meta > span { font-size: 10px; }.page-card { min-height: 48vh; }.editor-content { min-height: 48vh; padding: 22px 15px 35px; }.moodboard { min-height: 49vh; }
+  .keyboard-dock { bottom: 5px; width: calc(100vw - 8px); }.keyboard-shell { padding: 6px 4px; }.keyboard-top { display: none; }.key-row { gap: 1px; margin-top: 2px; }.key { height: 22px; font-size: 7px; border-radius: 4px; border-bottom-width: 2px; }.keyboard-dock .key-row:nth-child(1) { display: none; }
+  .format-bar { bottom: 160px; }.typing-stage { padding-bottom: 192px; }.typing-exercises { padding-bottom: 55px; }.mood-inspector { bottom: 174px; max-height: 43vh; }
+}

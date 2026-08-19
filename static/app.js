@@ -32,6 +32,7 @@
   let activeView = window.location.hash === "#app" ? "app" : "landing";
   let workspaceTab = "write";
   let selectedMoodId = "";
+  let mobileInputTarget = "body";
   let typingSession = { exerciseId: "home-row", visibleLength: 0, ready: false, value: "", errors: 0, startedAt: 0, finished: false };
   let typingAnimationTimer = null;
   let syncStatus = "guest · not saved";
@@ -256,7 +257,14 @@
   }
 
   async function signOut() {
-    try { if (authReady()) await firebase.auth().signOut(); firebaseUser = null; renderAll(); showToast("Signed out"); } catch (error) { showToast(authErrorMessage(error)); }
+    try {
+      clearTimeout(saveTimer);
+      if (firebaseUser && userHydrated && hydratedUserId === firebaseUser.uid && dirtyScopes.size) await tryRemoteSync();
+      hydrationRequestId += 1;
+      if (authReady()) await firebase.auth().signOut();
+      firebaseUser = null; userHydrated=false; hydratedUserId=""; hydratingUserId=""; dirtyScopes.clear(); selectedMoodId="";
+      renderAll(); showToast("Signed out");
+    } catch (error) { showToast(authErrorMessage(error)); }
   }
 
   function updateSyncLabels() {
@@ -387,6 +395,22 @@
   ];
 
   function currentTypingExercise() { return typingExercises.find(exercise => exercise.id === typingSession.exerciseId) || typingExercises[0]; }
+  function isTouchLayout() { return window.matchMedia?.("(pointer: coarse)").matches || window.innerWidth <= 820; }
+
+  function updateTypingValue(nextValue, input) {
+    const exercise = currentTypingExercise();
+    typingSession.value = nextValue.slice(0, exercise.text.length);
+    if (!typingSession.startedAt && typingSession.value.length) typingSession.startedAt = Date.now();
+    typingSession.errors = [...typingSession.value].reduce((total, character, index) => total + (character !== exercise.text[index] ? 1 : 0), 0);
+    if (input) input.value = typingSession.value;
+    const prompt = document.querySelector("[data-typing-prompt]");
+    if (prompt) prompt.innerHTML = typingPromptMarkup(exercise.text, typingSession.value, exercise.text.length);
+    const progress = document.querySelector(".typing-progress span");
+    if (progress) progress.style.width = `${typingProgress()}%`;
+    const progressLabel = document.querySelector(".typing-actions span:last-child");
+    if (progressLabel) progressLabel.textContent = `${typingProgress()}%`;
+    if (typingSession.value.length >= exercise.text.length) finishTypingExercise();
+  }
 
   function resetTypingSession(exerciseId = typingSession.exerciseId) {
     clearInterval(typingAnimationTimer);
@@ -439,7 +463,7 @@
   function renderTyping() {
     const exercise = currentTypingExercise();
     const stats = state.typingStats || defaultState.typingStats;
-    return `<section class="editor-stage typing-stage"><div class="editor-head"><div><span class="eyebrow"><b>✦</b> enhance typing</span><h2 class="typing-heading">Practice the rhythm, not the rush.</h2></div><div class="editor-tools"><button class="pill-btn" data-action="reset-typing">↻ <span>New exercise</span></button></div></div><div class="typing-layout"><div class="typing-card"><div class="typing-card-top"><span>vex / typewriter</span><span>${escapeHtml(exercise.level)}</span></div><div class="typing-prompt" data-typing-prompt>${typingPromptMarkup(exercise.text, typingSession.value, typingSession.visibleLength || exercise.text.length)}</div><input class="typing-input" data-typing-input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the sentence above…" aria-label="Typing exercise input" ${typingSession.ready ? "" : "disabled"} value="${escapeHtml(typingSession.value)}" /><div class="typing-progress"><span style="width:${typingProgress()}%"></span></div><div class="typing-actions"><span>${typingSession.ready ? "Your turn." : "Setting the page…"}</span><span>${typingProgress()}%</span></div></div><aside class="typing-stats"><p class="side-label">your rhythm</p><div class="stat-grid"><div><strong>${stats.bestWpm || 0}</strong><span>best wpm</span></div><div><strong>${stats.bestAccuracy || 0}%</strong><span>best accuracy</span></div><div><strong>${stats.completed || 0}</strong><span>completed</span></div><div><strong>${stats.streak || 0}</strong><span>streak</span></div></div><p class="typing-note">${firebaseUser ? "Your progress is private to this account and syncs across devices." : "Try it freely. Sign in when you want Vex to remember your progress."}</p>${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save progress ↗</button>` : ""}</aside></div><div class="typing-exercises"><p class="side-label">choose a feeling</p>${typingExercises.map(item => `<button class="exercise-chip ${item.id === exercise.id ? "active" : ""}" data-action="select-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.level)}</small></button>`).join("")}</div></section>`;
+    return `<section class="editor-stage typing-stage"><div class="editor-head"><div><span class="eyebrow"><b>✦</b> enhance typing</span><h2 class="typing-heading">Practice the rhythm, not the rush.</h2></div><div class="editor-tools"><button class="pill-btn" data-action="reset-typing">↻ <span>New exercise</span></button></div></div><div class="typing-layout"><div class="typing-card"><div class="typing-card-top"><span>vex / typewriter</span><span>${escapeHtml(exercise.level)}</span></div><div class="typing-prompt" data-typing-prompt>${typingPromptMarkup(exercise.text, typingSession.value, typingSession.visibleLength || exercise.text.length)}</div><input class="typing-input ${isTouchLayout() ? "mobile-typing-input" : ""}" data-typing-input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="none" ${isTouchLayout() ? "readonly" : ""} placeholder="${isTouchLayout() ? "Use the Vex keyboard below…" : "Type the sentence above…"}" aria-label="Typing exercise input" ${typingSession.ready ? "" : "disabled"} value="${escapeHtml(typingSession.value)}" /><div class="typing-progress"><span style="width:${typingProgress()}%"></span></div><div class="typing-actions"><span>${typingSession.ready ? "Your turn." : "Setting the page…"}</span><span>${typingProgress()}%</span></div></div><aside class="typing-stats"><p class="side-label">your rhythm</p><div class="stat-grid"><div><strong>${stats.bestWpm || 0}</strong><span>best wpm</span></div><div><strong>${stats.bestAccuracy || 0}%</strong><span>best accuracy</span></div><div><strong>${stats.completed || 0}</strong><span>completed</span></div><div><strong>${stats.streak || 0}</strong><span>streak</span></div></div><p class="typing-note">${firebaseUser ? "Your progress is private to this account and syncs across devices." : "Try it freely. Sign in when you want Vex to remember your progress."}</p>${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save progress ↗</button>` : ""}</aside></div><div class="typing-exercises"><p class="side-label">choose a feeling</p>${typingExercises.map(item => `<button class="exercise-chip ${item.id === exercise.id ? "active" : ""}" data-action="select-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.level)}</small></button>`).join("")}</div></section>`;
   }
 
   function pageClass() { return state.pageType; }
@@ -506,7 +530,8 @@
   }
 
   function renderEditor() {
-    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" /><div class="editor-tools"><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>Today · just now</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-content" contenteditable="true" spellcheck="true" data-placeholder="Start with a sentence, a question, or a tiny spark…">${formatPreview(state.content)}</div></div>${renderFormatBar()}</section>`;
+    const touchMode = isTouchLayout();
+    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" ${touchMode ? "readonly inputmode=none" : ""} /><div class="editor-tools"><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>${touchMode ? "Use the Vex keyboard below" : "Today · just now"}</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-content ${touchMode ? "mobile-editor-content" : ""}" contenteditable="${touchMode ? "false" : "true"}" inputmode="none" spellcheck="false" data-placeholder="Start with a sentence, a question, or a tiny spark…">${formatPreview(state.content)}</div></div>${renderFormatBar()}</section>`;
   }
 
   function renderMoodboard() {
@@ -619,22 +644,14 @@
     root.querySelectorAll(".page-title:not([readonly])").forEach(input => input.addEventListener("input", e => { state.title = e.target.value; persist("page"); }));
     const typingInput = root.querySelector("[data-typing-input]");
     if (typingInput) {
-      typingInput.addEventListener("input", e => {
-        const exercise = currentTypingExercise();
-        typingSession.value = e.target.value.slice(0, exercise.text.length);
-        if (!typingSession.startedAt && typingSession.value.length) typingSession.startedAt = Date.now();
-        typingSession.errors = [...typingSession.value].reduce((total, character, index) => total + (character !== exercise.text[index] ? 1 : 0), 0);
-        e.target.value = typingSession.value;
-        const prompt = root.querySelector("[data-typing-prompt]");
-        if (prompt) prompt.innerHTML = typingPromptMarkup(exercise.text, typingSession.value, exercise.text.length);
-        const progress = root.querySelector(".typing-progress span");
-        if (progress) progress.style.width = `${typingProgress()}%`;
-        const progressLabel = root.querySelector(".typing-actions span:last-child");
-        if (progressLabel) progressLabel.textContent = `${typingProgress()}%`;
-        if (typingSession.value.length >= exercise.text.length) finishTypingExercise();
-      });
+      typingInput.addEventListener("input", e => updateTypingValue(e.target.value, e.target));
     }
     const editor = root.querySelector(".editor-content");
+    const pageTitle = root.querySelector(".page-title");
+    if (isTouchLayout()) {
+      pageTitle?.addEventListener("pointerdown", event => { event.preventDefault(); mobileInputTarget="title"; pageTitle.classList.add("mobile-input-active"); });
+      editor?.addEventListener("pointerdown", event => { event.preventDefault(); mobileInputTarget="body"; editor.classList.add("mobile-input-active"); });
+    }
     if (editor) {
       editor.addEventListener("input", () => { state.content = editorToMarkdown(editor); persist("page"); });
       editor.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold"); } });
@@ -670,8 +687,41 @@
     const code = keyEl.dataset.code;
     keyEl.classList.add("pressed"); setTimeout(() => keyEl.classList.remove("pressed"), 110);
     playKeySound(code);
+    const typingInput = document.querySelector("[data-typing-input]");
+    if (typingInput && workspaceTab === "typing" && typingSession.ready && !typingSession.finished) {
+      let nextValue = typingSession.value;
+      if (key === "space") nextValue += " ";
+      else if (key === "⌫") nextValue = nextValue.slice(0, -1);
+      else if (key === "↵") nextValue += "\n";
+      else if (!(["tab","caps","shift","ctrl","alt","⌘","fn","←","↓","→"].includes(key))) nextValue += key.length === 1 ? key.toLowerCase() : key;
+      if (nextValue !== typingSession.value) updateTypingValue(nextValue, typingInput);
+      return;
+    }
+    const ignoredKeys = ["tab","caps","shift","ctrl","alt","⌘","fn","←","↓","→"];
+    if (isTouchLayout() && workspaceTab === "write") {
+      if (ignoredKeys.includes(key)) return;
+      const valueTarget = mobileInputTarget === "title" ? "title" : "body";
+      const currentValue = valueTarget === "title" ? state.title : state.content;
+      let nextValue = currentValue;
+      if (key === "⌫") nextValue = currentValue.slice(0, -1);
+      else if (key === "space") nextValue += " ";
+      else if (key === "↵") nextValue += valueTarget === "body" ? "\n" : "";
+      else if (key.length === 1) nextValue += key.toLowerCase();
+      if (nextValue === currentValue) return;
+      if (valueTarget === "title") {
+        state.title = nextValue;
+        const titleInput = document.querySelector(".page-title");
+        if (titleInput) titleInput.value = state.title;
+      } else {
+        state.content = nextValue;
+        const editor = document.querySelector(".editor-content");
+        if (editor) editor.innerHTML = formatPreview(state.content);
+      }
+      persist("page");
+      return;
+    }
     const editor = document.querySelector(".editor-content");
-    if (!editor || ["tab","caps","shift","ctrl","alt","⌘","fn","←","↓","→"].includes(key)) return;
+    if (!editor || ignoredKeys.includes(key)) return;
     editor.focus();
     if (key === "space") document.execCommand("insertText", false, " ");
     else if (key === "⌫") document.execCommand("delete", false);
@@ -793,6 +843,8 @@
 
   let userHydrated = false;
   let hydratingUserId = "";
+  let hydratedUserId = "";
+  let hydrationRequestId = 0;
 
   function userRoot(uid) { return firebaseDb.collection("users").doc(uid); }
   function userPage(uid) { return userRoot(uid).collection("pages").doc("daily-notes"); }
@@ -822,10 +874,13 @@
 
   async function hydrateUserData(user) {
     if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !user) return;
+    const requestId = ++hydrationRequestId;
+    const requestUserId = user.uid;
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
-      hydratingUserId = user.uid;
+      hydratingUserId = requestUserId;
+      hydratedUserId = "";
       userHydrated = false;
       syncStatus = "loading your space";
       updateSyncLabels();
@@ -835,10 +890,22 @@
         userRoot(user.uid).collection("boards").limit(50).get(),
         userTyping(user.uid).get()
       ]);
-      const pageDocs = pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+      let legacyFilesSnap = { docs: [], size: 0 };
+      try {
+        legacyFilesSnap = await firebaseDb.collection("files").where("user_id", "==", user.uid).limit(100).get();
+      } catch (legacyError) {
+        console.warn("Vex legacy file migration skipped:", legacyError);
+      }
+      if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
+      const pageDocs = pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+      const legacyPages = legacyFilesSnap.docs.map(doc => { const data=doc.data(); return { id:`legacy-${doc.id}`, title:data.title || data.name || "Recovered note", content:data.content || data.text || "", page_type:data.page_type || "ruled-single", updated_at:data.updated_at || data.updatedAt || data.created_at || "", legacy_file_id:doc.id }; });
+      const pageById = new Map([...pageDocs, ...legacyPages].map(page => [page.id, page]));
+      const allPages = [...pageById.values()].sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
       const boardDocs = boardsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
       const itemResults = await Promise.all(boardDocs.map(board => userRoot(user.uid).collection("boards").doc(board.id).collection("items").limit(500).get()));
-      state.pages = pageDocs.length ? pageDocs : state.pages;
+      if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
+      state.pages = allPages.length ? allPages : [{ id:"daily-notes", title:"A softer place to think", content:"", page_type:"ruled-single", updated_at:"" }];
+      if (legacyPages.length) dirtyScopes.add("page");
       state.boards = boardDocs.length ? boardDocs : state.boards;
       state.boardItems = {};
       boardDocs.forEach((board, index) => { state.boardItems[board.id] = itemResults[index].docs.map(doc => ({ id:doc.id, ...doc.data() })); });
@@ -861,20 +928,26 @@
       workspaceTab = "write";
       if (typingSnap.exists) state.typingStats = { ...defaultState.typingStats, ...typingSnap.data() };
       userHydrated = true;
+      hydratedUserId = requestUserId;
+      dirtyScopes.clear();
       syncStatus = "synced";
       document.documentElement.dataset.theme = state.theme;
       updateFavicon(state.theme);
       renderAll();
-      if (!pagesSnap.size && !boardsSnap.size && !settingsSnap.exists && !typingSnap.exists) await tryRemoteSync();
-    } catch (_) {
-      userHydrated = true;
-      syncStatus = "signed in · retrying sync";
+      if (!pagesSnap.size && !boardsSnap.size && !settingsSnap.exists && !typingSnap.exists && !legacyFilesSnap.size) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
+      if (legacyPages.length || (!pagesSnap.size && !boardsSnap.size && !settingsSnap.exists && !typingSnap.exists)) await tryRemoteSync();
+    } catch (error) {
+      if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
+      userHydrated = false;
+      hydratedUserId = "";
+      syncStatus = "sync unavailable · retrying";
+      console.error("Vex hydration failed", error);
       updateSyncLabels();
     }
   }
 
   async function tryRemoteSync() {
-    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !firebaseUser || !userHydrated || hydratingUserId !== firebaseUser.uid) return;
+    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return;
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
@@ -915,19 +988,22 @@
       auth.getRedirectResult().catch(error => { if (error?.code !== "auth/no-auth-event") showAuthModal(authErrorMessage(error)); });
       auth.onAuthStateChanged(user => {
         const previousUid = firebaseUser?.uid || lastAuthenticatedUid;
+        hydrationRequestId += 1;
         firebaseUser = user || null;
+        userHydrated = false;
+        hydratedUserId = "";
+        hydratingUserId = user?.uid || "";
+        dirtyScopes.clear();
+        selectedMoodId = "";
+        state = cloneState(defaultState);
+        ensureWorkspaceHistory();
         if (user) {
-          if (previousUid && previousUid !== user.uid) {
-            state = cloneState(defaultState);
-            document.documentElement.dataset.theme = state.theme;
-          }
           lastAuthenticatedUid = user.uid;
+          syncStatus = previousUid && previousUid !== user.uid ? "loading your space" : "loading your space";
+          document.documentElement.dataset.theme = state.theme;
           renderAll();
           hydrateUserData(user);
         } else {
-          userHydrated = false;
-          hydratingUserId = "";
-          state = cloneState(defaultState);
           workspaceTab = "write";
           clearInterval(typingAnimationTimer);
           typingSession = { exerciseId:"home-row", visibleLength:0, ready:false, value:"", errors:0, startedAt:0, finished:false };
