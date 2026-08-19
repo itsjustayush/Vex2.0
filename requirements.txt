@@ -3,5 +3,5 @@ firebase-admin
 requests
 httpx
 PyJWT
-google-generativeai>=0.8.0
+google-generativeai>=0.8.6
 python-dotenv
