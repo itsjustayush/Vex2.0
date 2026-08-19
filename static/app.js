@@ -845,11 +845,95 @@
   let hydratingUserId = "";
   let hydratedUserId = "";
   let hydrationRequestId = 0;
+  let remoteBoardItemIds = {};
 
   function userRoot(uid) { return firebaseDb.collection("users").doc(uid); }
   function userPage(uid) { return userRoot(uid).collection("pages").doc("daily-notes"); }
   function userBoard(uid) { return userRoot(uid).collection("boards").doc("moodboard"); }
   function userTyping(uid) { return userRoot(uid).collection("typing").doc("stats"); }
+
+  function vexFirestoreDatabaseId() { return firebaseConfig.firestoreDatabaseId || "(default)"; }
+  function vexFirestoreDocumentName(path) {
+    return `projects/${firebaseConfig.projectId}/databases/${vexFirestoreDatabaseId()}/documents/${path}`;
+  }
+  function vexFirestoreUrl(path = "") {
+    const encodedPath = path.split("/").filter(Boolean).map(segment => encodeURIComponent(String(segment))).join("/");
+    return `https://firestore.googleapis.com/v1/${vexFirestoreDocumentName(encodedPath)}`;
+  }
+  function vexFirestoreBatchUrl() {
+    return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(vexFirestoreDatabaseId())}/documents:batchWrite`;
+  }
+  function firestoreValue(value) {
+    if (value === null || value === undefined) return { nullValue: null };
+    if (typeof value === "boolean") return { booleanValue: value };
+    if (typeof value === "number") return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+    if (typeof value === "string") return { stringValue: value };
+    if (Array.isArray(value)) return { arrayValue: { values: value.map(firestoreValue) } };
+    if (value instanceof Date) return { timestampValue: value.toISOString() };
+    if (typeof value === "object") return { mapValue: { fields: Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, firestoreValue(item)])) } };
+    return { stringValue: String(value) };
+  }
+  function firestoreFields(data) { return Object.fromEntries(Object.entries(data || {}).filter(([, value]) => value !== undefined).map(([key, value]) => [key, firestoreValue(value)])); }
+  function readFirestoreValue(value) {
+    if (!value) return null;
+    if (Object.prototype.hasOwnProperty.call(value, "nullValue")) return null;
+    if (Object.prototype.hasOwnProperty.call(value, "stringValue")) return value.stringValue;
+    if (Object.prototype.hasOwnProperty.call(value, "booleanValue")) return value.booleanValue;
+    if (Object.prototype.hasOwnProperty.call(value, "integerValue")) return Number(value.integerValue);
+    if (Object.prototype.hasOwnProperty.call(value, "doubleValue")) return value.doubleValue;
+    if (Object.prototype.hasOwnProperty.call(value, "timestampValue")) return value.timestampValue;
+    if (Object.prototype.hasOwnProperty.call(value, "bytesValue")) return value.bytesValue;
+    if (Object.prototype.hasOwnProperty.call(value, "referenceValue")) return value.referenceValue;
+    if (Object.prototype.hasOwnProperty.call(value, "arrayValue")) return (value.arrayValue.values || []).map(readFirestoreValue);
+    if (Object.prototype.hasOwnProperty.call(value, "mapValue")) return Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([key, item]) => [key, readFirestoreValue(item)]));
+    return null;
+  }
+  function firestoreDocumentToObject(document) {
+    const name = document?.name || "";
+    const id = decodeURIComponent(name.split("/").pop() || "");
+    return { id, ...Object.fromEntries(Object.entries(document?.fields || {}).map(([key, value]) => [key, readFirestoreValue(value)])) };
+  }
+  async function firestoreRestRequest(url, options = {}) {
+    if (!firebaseUser) throw new Error("Vex sync requires an authenticated Firebase user.");
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization:`Bearer ${token}`, "Content-Type":"application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error?.message || `Firestore sync failed (${response.status}).`);
+    return payload;
+  }
+  async function firestoreRestList(path, pageSize = 100) {
+    const payload = await firestoreRestRequest(`${vexFirestoreUrl(path)}?pageSize=${pageSize}`);
+    return (payload.documents || []).map(firestoreDocumentToObject);
+  }
+  async function firestoreRestGet(path) {
+    try { return firestoreDocumentToObject(await firestoreRestRequest(vexFirestoreUrl(path))); }
+    catch (error) { if (String(error.message || "").includes("(404)") || /not found/i.test(error.message || "")) return null; throw error; }
+  }
+  async function firestoreRestBatchWrite(writes) {
+    for (let offset = 0; offset < writes.length; offset += 450) {
+      const chunk = writes.slice(offset, offset + 450).map(write => write.delete ? { delete:vexFirestoreDocumentName(write.delete) } : { update: { name:vexFirestoreDocumentName(write.path), fields:firestoreFields(write.data) } });
+      const payload = await firestoreRestRequest(vexFirestoreBatchUrl(), { method:"POST", body:JSON.stringify({ writes:chunk }) });
+      const failed = (payload.status || []).find(status => status.code);
+      if (failed) throw new Error(failed.message || `Firestore batch write failed (${failed.code}).`);
+    }
+  }
+  async function readCompatDefaultUserData(uid) {
+    const [pagesSnap, settingsSnap, boardsSnap, typingSnap] = await Promise.all([
+      userRoot(uid).collection("pages").limit(100).get(),
+      userRoot(uid).collection("settings").doc("preferences").get(),
+      userRoot(uid).collection("boards").limit(50).get(),
+      userTyping(uid).get()
+    ]);
+    const boardDocs = boardsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+    const itemResults = await Promise.all(boardDocs.map(board => userRoot(uid).collection("boards").doc(board.id).collection("items").limit(500).get()));
+    return {
+      pageDocs:pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })),
+      settingsDoc:settingsSnap.exists ? settingsSnap.data() : null,
+      boardDocs,
+      itemResults:itemResults.map(snapshot => snapshot.docs.map(doc => ({ id:doc.id, ...doc.data() }))),
+      typingDoc:typingSnap.exists ? typingSnap.data() : null
+    };
+  }
 
   function serializableMoodItem(item) {
     const safe = { ...item };
@@ -884,31 +968,57 @@
       userHydrated = false;
       syncStatus = "loading your space";
       updateSyncLabels();
-      const [pagesSnap, settingsSnap, boardsSnap, typingSnap] = await Promise.all([
-        userRoot(user.uid).collection("pages").limit(100).get(),
-        userRoot(user.uid).collection("settings").doc("preferences").get(),
-        userRoot(user.uid).collection("boards").limit(50).get(),
-        userTyping(user.uid).get()
-      ]);
-      let legacyFilesSnap = { docs: [], size: 0 };
+      let pageDocs = [], settingsDoc = null, boardDocs = [], typingDoc = null, fallbackItems = [];
+      let namedReadError = null;
+      let recoveredDefaultData = false;
       try {
-        legacyFilesSnap = await firebaseDb.collection("files").where("user_id", "==", user.uid).limit(100).get();
+        [pageDocs, settingsDoc, boardDocs, typingDoc] = await Promise.all([
+          firestoreRestList(`users/${requestUserId}/pages`, 100),
+          firestoreRestGet(`users/${requestUserId}/settings/preferences`),
+          firestoreRestList(`users/${requestUserId}/boards`, 50),
+          firestoreRestGet(`users/${requestUserId}/typing/stats`)
+        ]);
+      } catch (error) {
+        namedReadError = error;
+      }
+      if (namedReadError || (!pageDocs.length && !boardDocs.length && !settingsDoc && !typingDoc)) {
+        try {
+          const fallback = await readCompatDefaultUserData(requestUserId);
+          if (fallback.pageDocs.length || fallback.boardDocs.length || fallback.settingsDoc || fallback.typingDoc) {
+            pageDocs = fallback.pageDocs;
+            settingsDoc = fallback.settingsDoc;
+            boardDocs = fallback.boardDocs;
+            fallbackItems = fallback.itemResults;
+            typingDoc = fallback.typingDoc;
+            recoveredDefaultData = true;
+            console.warn("Vex recovered user data from the legacy default Firestore database.");
+          } else if (namedReadError) {
+            throw namedReadError;
+          }
+        } catch (fallbackError) {
+          if (namedReadError) throw namedReadError;
+          console.warn("Vex default Firestore recovery skipped:", fallbackError);
+        }
+      }
+      let legacyPages = [];
+      try {
+        const legacyFiles = await firestoreRestList("files", 100);
+        legacyPages = legacyFiles.filter(data => data.user_id === requestUserId).map(data => ({ id:`legacy-${data.id}`, title:data.title || data.name || "Recovered note", content:data.content || data.text || "", page_type:data.page_type || "ruled-single", updated_at:data.updated_at || data.updatedAt || data.created_at || "", legacy_file_id:data.id }));
       } catch (legacyError) {
         console.warn("Vex legacy file migration skipped:", legacyError);
       }
       if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
-      const pageDocs = pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
-      const legacyPages = legacyFilesSnap.docs.map(doc => { const data=doc.data(); return { id:`legacy-${doc.id}`, title:data.title || data.name || "Recovered note", content:data.content || data.text || "", page_type:data.page_type || "ruled-single", updated_at:data.updated_at || data.updatedAt || data.created_at || "", legacy_file_id:doc.id }; });
       const pageById = new Map([...pageDocs, ...legacyPages].map(page => [page.id, page]));
       const allPages = [...pageById.values()].sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
-      const boardDocs = boardsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
-      const itemResults = await Promise.all(boardDocs.map(board => userRoot(user.uid).collection("boards").doc(board.id).collection("items").limit(500).get()));
+      const sortedBoards = boardDocs.sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+      const itemResults = fallbackItems.length ? fallbackItems : await Promise.all(sortedBoards.map(board => firestoreRestList(`users/${requestUserId}/boards/${board.id}/items`, 500)));
       if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
       state.pages = allPages.length ? allPages : [{ id:"daily-notes", title:"A softer place to think", content:"", page_type:"ruled-single", updated_at:"" }];
-      if (legacyPages.length) dirtyScopes.add("page");
-      state.boards = boardDocs.length ? boardDocs : state.boards;
+      if (legacyPages.length || recoveredDefaultData) dirtyScopes.add("page");
+      state.boards = sortedBoards.length ? sortedBoards : state.boards;
       state.boardItems = {};
-      boardDocs.forEach((board, index) => { state.boardItems[board.id] = itemResults[index].docs.map(doc => ({ id:doc.id, ...doc.data() })); });
+      remoteBoardItemIds = {};
+      sortedBoards.forEach((board, index) => { state.boardItems[board.id] = itemResults[index]; remoteBoardItemIds[board.id] = itemResults[index].map(item => item.id); });
       const latestPage = state.pages[0];
       if (latestPage) {
         state.pageId = latestPage.id;
@@ -916,8 +1026,8 @@
         state.content = latestPage.content || "";
         state.pageType = latestPage.page_type || "ruled-single";
       }
-      if (settingsSnap.exists) {
-        const settings = settingsSnap.data();
+      if (settingsDoc) {
+        const settings = settingsDoc;
         if (settings.theme) state.theme = settings.theme;
         if (typeof settings.muted === "boolean") state.muted = settings.muted;
       }
@@ -926,7 +1036,7 @@
       if (firstBoard) setActiveBoard(firstBoard.id);
       state.moodboard = false;
       workspaceTab = "write";
-      if (typingSnap.exists) state.typingStats = { ...defaultState.typingStats, ...typingSnap.data() };
+      if (typingDoc) state.typingStats = { ...defaultState.typingStats, ...typingDoc };
       userHydrated = true;
       hydratedUserId = requestUserId;
       dirtyScopes.clear();
@@ -934,8 +1044,9 @@
       document.documentElement.dataset.theme = state.theme;
       updateFavicon(state.theme);
       renderAll();
-      if (!pagesSnap.size && !boardsSnap.size && !settingsSnap.exists && !typingSnap.exists && !legacyFilesSnap.size) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
-      if (legacyPages.length || (!pagesSnap.size && !boardsSnap.size && !settingsSnap.exists && !typingSnap.exists)) await tryRemoteSync();
+      if (recoveredDefaultData) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
+      if (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc && !legacyPages.length && !recoveredDefaultData) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
+      if (recoveredDefaultData || legacyPages.length || (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc)) await tryRemoteSync();
     } catch (error) {
       if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
       userHydrated = false;
@@ -956,28 +1067,33 @@
       const now = new Date().toISOString();
       const scopes = new Set(dirtyScopes);
       if (!scopes.size) return;
-      const batch = firebaseDb.batch();
-      batch.set(userRoot(uid), { uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 }, { merge:true });
+      const writes = [{ path:`users/${uid}`, data:{ uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 } }];
       if (scopes.has("page")) {
         rememberCurrentPage();
-        state.pages.slice(0, 100).forEach(page => batch.set(userRoot(uid).collection("pages").doc(String(page.id)), { ...page, schema_version:1 }, { merge:true }));
+        state.pages.slice(0, 100).forEach(page => writes.push({ path:`users/${uid}/pages/${page.id}`, data:{ ...page, schema_version:1 } }));
       }
-      if (scopes.has("settings")) batch.set(userRoot(uid).collection("settings").doc("preferences"), { theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId, updated_at:now, schema_version:1 }, { merge:true });
-      if (scopes.has("typing")) batch.set(userTyping(uid), { ...state.typingStats, updated_at:now, schema_version:1 }, { merge:true });
+      if (scopes.has("settings")) writes.push({ path:`users/${uid}/settings/preferences`, data:{ theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId, updated_at:now, schema_version:1 } });
+      if (scopes.has("typing")) writes.push({ path:`users/${uid}/typing/stats`, data:{ ...state.typingStats, updated_at:now, schema_version:1 } });
       if (scopes.has("board")) {
         rememberCurrentBoard();
         for (const board of state.boards.slice(0, 50)) {
           const items = state.boardItems[board.id] || [];
-          const boardRef = userRoot(uid).collection("boards").doc(String(board.id));
-          batch.set(boardRef, { ...board, board_id:board.id, item_count:items.length, updated_at:board.id === state.activeBoardId ? now : (board.updated_at || now), schema_version:1 }, { merge:true });
+          writes.push({ path:`users/${uid}/boards/${board.id}`, data:{ ...board, board_id:board.id, item_count:items.length, updated_at:board.id === state.activeBoardId ? now : (board.updated_at || now), schema_version:1 } });
           const syncedItems = await Promise.all(items.slice(0, 500).map(item => prepareMoodItemForSync(item, uid)));
-          syncedItems.forEach(item => batch.set(boardRef.collection("items").doc(String(item.id)), { ...item, updated_at:now, schema_version:1 }, { merge:true }));
+          syncedItems.forEach(item => writes.push({ path:`users/${uid}/boards/${board.id}/items/${item.id}`, data:{ ...item, updated_at:now, schema_version:1 } }));
+          const currentIds = new Set(items.map(item => String(item.id)));
+          (remoteBoardItemIds[board.id] || []).filter(itemId => !currentIds.has(String(itemId))).forEach(itemId => writes.push({ delete:`users/${uid}/boards/${board.id}/items/${itemId}` }));
+          remoteBoardItemIds[board.id] = items.map(item => item.id);
         }
       }
-      await batch.commit();
+      await firestoreRestBatchWrite(writes);
       scopes.forEach(scope => dirtyScopes.delete(scope));
       syncStatus = "synced"; updateSyncLabels();
-    } catch (_) { syncStatus = "sync paused · retrying"; updateSyncLabels(); }
+    } catch (error) {
+      syncStatus = "sync paused · retrying";
+      console.error("Vex named Firestore sync failed", error);
+      updateSyncLabels();
+    }
   }
 
   function initFirebase() {
