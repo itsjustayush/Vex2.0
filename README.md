@@ -30,9 +30,16 @@ Then open `http://127.0.0.1:3000/`.
 | `static/sound.ogg` | Supplied CherryMX-style sound pack used for keydown playback. |
 | `static/sound-config.json` | Sample offsets used to play the matching key segment. |
 | `firebase-applet-config.json` | Existing Firebase client configuration. |
-| `firestore.rules` | Existing authenticated Firestore ownership rules. |
+| `firestore.rules` | Authenticated per-user Firestore ownership rules for pages, boards, items, settings, and legacy collections. |
+| `storage.rules` | Authenticated per-user Firebase Storage rules for moodboard media. |
 | `templates/login.html` and `templates/callback.html` | Preserved auth templates, intentionally not linked in the prototype. |
+
+## Persistence and storage model
+
+Vex starts every unauthenticated visitor in an in-memory guest session. Guests can use the editor, keyboard, themes, and moodboard normally, but the app does not read or write the workspace to `localStorage`, Firebase, or the server. The guest status is shown as `guest · not saved`, with a visible sign-in-to-save action. After Google or email authentication, the current in-memory workspace is hydrated from, or promoted into, the authenticated user’s private Firestore space.
+
+The scalable schema is rooted at the Firebase Auth UID: `users/{uid}` stores profile metadata, `users/{uid}/pages/{pageId}` stores page documents, `users/{uid}/boards/{boardId}` stores board metadata, `users/{uid}/boards/{boardId}/items/{itemId}` stores individual moodboard items, and `users/{uid}/settings/{settingId}` stores preferences. Firestore rules allow access only when `request.auth.uid` matches the `{uid}` path segment. Batched writes keep page, board, item, and settings updates efficient while limiting a board sync to the first 450 items under Firestore’s batch limit. Large moodboard images are uploaded to `users/{uid}/moodboard/{fileName}` in Firebase Storage, with only their download URL and metadata kept in Firestore.
 
 ## Next implementation phase
 
-For true cross-device sync for signed-out users, re-enable an identity flow or configure Firebase Anonymous Authentication. The current adapter is deliberately safe: it never attempts to create a shared anonymous identity, so unauthenticated sessions fall back to a device-local draft.
+Guest sessions are intentionally non-persistent. Cross-device sync is available only after the user signs in or signs up, which keeps every saved workspace tied to a verified Firebase Auth UID.

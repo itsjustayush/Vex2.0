@@ -19,30 +19,42 @@
   let state = loadState();
   let saveTimer = null;
   let toastTimer = null;
+  const dirtyScopes = new Set(["page", "board", "settings"]);
   let activeView = window.location.hash === "#app" ? "app" : "landing";
-  let syncStatus = "local draft";
+  let syncStatus = "guest · not saved";
   let firebaseDb = null;
+  let firebaseStorage = null;
   let firebaseUser = null;
+  let lastAuthenticatedUid = "";
   let soundContext = null;
   let soundBuffer = null;
   let soundConfig = null;
   let soundLoadPromise = null;
   const pressedCodes = new Set();
 
-  function loadState() {
-    try { return { ...defaultState, ...JSON.parse(localStorage.getItem(storageKey) || "{}")} } catch (_) { return { ...defaultState }; }
+  function cloneState(source = defaultState) {
+    return JSON.parse(JSON.stringify(source));
   }
 
-  function persist() {
+  function loadState() {
+    // Guest sessions intentionally never hydrate from localStorage.
+    // Any legacy local draft is removed so unauthenticated data cannot persist.
+    try { localStorage.removeItem(storageKey); } catch (_) {}
+    return cloneState(defaultState);
+  }
+
+  function persist(scope = "all") {
+    if (scope === "all") ["page", "board", "settings"].forEach(name => dirtyScopes.add(name));
+    else dirtyScopes.add(scope);
     clearTimeout(saveTimer);
+    if (!firebaseUser) {
+      syncStatus = "guest · not saved";
+      updateSyncLabels();
+      return;
+    }
     syncStatus = "saving";
     updateSyncLabels();
-    saveTimer = setTimeout(() => {
-      localStorage.setItem(storageKey, JSON.stringify(state));
-      syncStatus = firebaseUser ? "synced" : "saved locally";
-      updateSyncLabels();
-      tryRemoteSync();
-    }, 260);
+    saveTimer = setTimeout(() => { tryRemoteSync(); }, 260);
   }
 
   function escapeHtml(value) {
@@ -174,7 +186,7 @@
   function setTheme(theme) {
     state.theme = theme;
     document.documentElement.dataset.theme = theme;
-    persist();
+    persist("settings");
     showToast(`${theme[0].toUpperCase()}${theme.slice(1)} theme`);
     renderAll();
   }
@@ -299,7 +311,7 @@
         <button class="side-item" data-action="set-page-type" data-value="dotted-light"><span class="item-icon">⠿</span><span>Dotted · light</span></button>
         <button class="side-item" data-action="set-page-type" data-value="dotted-dense"><span class="item-icon">⠿</span><span>Dotted · dense</span></button>
       </div>
-      <div class="side-note"><strong>Synced by Firebase</strong> Your local draft is always available. Sign in can be re-enabled later for cross-device identity sync.</div>
+      <div class="side-note ${firebaseUser ? "side-note-auth" : "side-note-guest"}"><strong>${firebaseUser ? "Synced by Firebase" : "Guest mode · not saved"}</strong>${firebaseUser ? "Your pages are stored in your private Vex space and sync across devices." : "Write and explore freely. Sign in or sign up before leaving to save your pages and sync them across devices."}${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save ↗</button>` : ""}</div>
     </div></aside>`;
   }
 
@@ -373,7 +385,7 @@
   function wireGlobal() {
     document.querySelectorAll("[data-action='open-app']").forEach(btn => btn.addEventListener("click", () => openView("app")));
     document.querySelectorAll("[data-action='open-landing']").forEach(btn => btn.addEventListener("click", () => openView("landing")));
-    document.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist(); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
+    document.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     document.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     document.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
     document.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
@@ -388,20 +400,20 @@
     }));
     root.querySelectorAll("[data-action='focus-editor']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = false; renderApp(); setTimeout(() => document.querySelector(".editor-content")?.focus(), 50); }));
     root.querySelectorAll("[data-action='switch-moodboard']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = true; renderApp(); }));
-    root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = false; state.title = "Untitled page"; state.content = ""; persist(); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
-    root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist(); renderAll(); }));
-    root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist(); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
+    root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { state.moodboard = false; state.title = "Untitled page"; state.content = ""; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
+    root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist("page"); renderAll(); }));
+    root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
     root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
-    root.querySelectorAll("[data-action='add-note']").forEach(btn => btn.addEventListener("click", () => { state.mood.push({ id:"m" + Date.now(), type:"note", color:["yellow","pink","blue","green"][state.mood.length % 4], x:180 + state.mood.length * 48, y:160 + state.mood.length * 35, title:"new thought", text:"Double-click to make this yours." }); persist(); renderAll(); }));
+    root.querySelectorAll("[data-action='add-note']").forEach(btn => btn.addEventListener("click", () => { state.mood.push({ id:"m" + Date.now(), type:"note", color:["yellow","pink","blue","green"][state.mood.length % 4], x:180 + state.mood.length * 48, y:160 + state.mood.length * 35, title:"new thought", text:"Double-click to make this yours." }); persist("board"); renderAll(); }));
     root.querySelectorAll("[data-action='export-page']").forEach(btn => btn.addEventListener("click", exportPage));
     root.querySelectorAll("[data-action='preview-markdown']").forEach(btn => btn.addEventListener("click", () => showToast("Markdown is rendered live as you type")));
-    root.querySelectorAll(".page-title:not([readonly])").forEach(input => input.addEventListener("input", e => { state.title = e.target.value; persist(); }));
+    root.querySelectorAll(".page-title:not([readonly])").forEach(input => input.addEventListener("input", e => { state.title = e.target.value; persist("page"); }));
     const editor = root.querySelector(".editor-content");
     if (editor) {
-      editor.addEventListener("input", () => { state.content = editorToMarkdown(editor); persist(); });
+      editor.addEventListener("input", () => { state.content = editorToMarkdown(editor); persist("page"); });
       editor.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold"); } });
     }
     root.querySelectorAll("[data-format]").forEach(btn => btn.addEventListener("click", () => applyFormat(btn.dataset.format)));
@@ -420,7 +432,7 @@
     const wraps = { bold:["**","**"], italic:["*","*"], heading:["### ",""], quote:["> ",""], code:["`","`"], math:["$","$"] };
     const [before, after] = wraps[kind] || ["",""];
     document.execCommand("insertText", false, before + text + after);
-    state.content = editorToMarkdown(editor); persist(); playKeySound(kind); 
+    state.content = editorToMarkdown(editor); persist("page"); playKeySound(kind);
   }
 
   function setPhysicalKey(code, pressed) {
@@ -440,7 +452,7 @@
     else if (key === "⌫") document.execCommand("delete", false);
     else if (key === "↵") document.execCommand("insertText", false, "\n");
     else document.execCommand("insertText", false, key.length === 1 ? key.toLowerCase() : key);
-    state.content = editorToMarkdown(editor); persist();
+    state.content = editorToMarkdown(editor); persist("page");
   }
 
   function exportPage() {
@@ -452,7 +464,7 @@
     [...files].forEach(file => {
       if (!file.type.startsWith("image/")) { showToast("Image uploads are live; video preview comes next"); return; }
       const reader = new FileReader();
-      reader.onload = e => { state.mood.push({ id:"m" + Date.now() + Math.random(), type:"image", src:e.target.result, name:file.name, x:220 + state.mood.length * 35, y:190 + state.mood.length * 26 }); persist(); renderApp(); };
+      reader.onload = e => { state.mood.push({ id:"m" + Date.now() + Math.random(), type:"image", src:e.target.result, name:file.name, x:220 + state.mood.length * 35, y:190 + state.mood.length * 26 }); persist("board"); renderApp(); };
       reader.readAsDataURL(file);
     });
   }
@@ -461,19 +473,100 @@
     let startX, startY, originX, originY;
     element.addEventListener("pointerdown", e => { if (e.target.closest("button")) return; element.setPointerCapture(e.pointerId); const item = state.mood.find(x => x.id === element.dataset.moodId); if (!item) return; startX=e.clientX;startY=e.clientY;originX=item.x;originY=item.y; element.addEventListener("pointermove", move); element.addEventListener("pointerup", up, { once:true }); });
     function move(e) { const item = state.mood.find(x => x.id === element.dataset.moodId); if (!item) return; item.x = originX + e.clientX - startX; item.y = originY + e.clientY - startY; element.style.left=item.x+"px"; element.style.top=item.y+"px"; }
-    function up() { element.removeEventListener("pointermove", move); persist(); }
+    function up() { element.removeEventListener("pointermove", move); persist("board"); }
   }
 
-  async function tryRemoteSync() {
-    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps) return;
+  let userHydrated = false;
+  let hydratingUserId = "";
+
+  function userRoot(uid) { return firebaseDb.collection("users").doc(uid); }
+  function userPage(uid) { return userRoot(uid).collection("pages").doc("daily-notes"); }
+  function userBoard(uid) { return userRoot(uid).collection("boards").doc("moodboard"); }
+
+  function serializableMoodItem(item) {
+    const safe = { ...item };
+    if (safe.type === "image" && typeof safe.src === "string" && safe.src.startsWith("data:")) delete safe.src;
+    return safe;
+  }
+
+  async function prepareMoodItemForSync(item, uid) {
+    const safe = serializableMoodItem(item);
+    if (item.type !== "image" || !item.src?.startsWith("data:") || !window.firebase?.storage) return safe;
+    try {
+      firebaseStorage = firebaseStorage || firebase.storage();
+      const blob = await fetch(item.src).then(response => response.blob());
+      const filename = `${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "_")}-${(item.name || "image").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const ref = firebaseStorage.ref().child(`users/${uid}/moodboard/${filename}`);
+      const snapshot = await ref.put(blob, { contentType: blob.type || "application/octet-stream" });
+      safe.src = await snapshot.ref.getDownloadURL();
+      safe.storage_path = ref.fullPath;
+    } catch (_) {}
+    return safe;
+  }
+
+  async function hydrateUserData(user) {
+    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !user) return;
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
-      firebaseUser = firebase.auth().currentUser;
-      if (!firebaseUser) { syncStatus = "saved locally"; updateSyncLabels(); return; }
-      await firebaseDb.collection("files").doc(`vex-prototype-${firebaseUser.uid}`).set({ id:`vex-prototype-${firebaseUser.uid}`, user_id:firebaseUser.uid, project_id:"vex-prototype", title:state.title, content:state.content, page_type:state.pageType, updated_at:new Date().toISOString() }, { merge:true });
+      hydratingUserId = user.uid;
+      userHydrated = false;
+      syncStatus = "loading your space";
+      updateSyncLabels();
+      const [pageSnap, settingsSnap, boardSnap, itemsSnap] = await Promise.all([
+        userPage(user.uid).get(),
+        userRoot(user.uid).collection("settings").doc("preferences").get(),
+        userBoard(user.uid).get(),
+        userBoard(user.uid).collection("items").orderBy("updated_at", "desc").limit(200).get()
+      ]);
+      if (pageSnap.exists) {
+        const page = pageSnap.data();
+        state.title = page.title || state.title;
+        state.content = page.content || state.content;
+        state.pageType = page.page_type || state.pageType;
+      }
+      if (settingsSnap.exists) {
+        const settings = settingsSnap.data();
+        if (settings.theme) state.theme = settings.theme;
+        if (typeof settings.muted === "boolean") state.muted = settings.muted;
+      }
+      if (itemsSnap.size) state.mood = itemsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
+      if (boardSnap.exists) state.moodboard = true;
+      userHydrated = true;
+      syncStatus = "synced";
+      document.documentElement.dataset.theme = state.theme;
+      renderAll();
+      if (!pageSnap.exists && !boardSnap.exists && !settingsSnap.exists && !itemsSnap.size) await tryRemoteSync();
+    } catch (_) {
+      userHydrated = true;
+      syncStatus = "signed in · retrying sync";
+      updateSyncLabels();
+    }
+  }
+
+  async function tryRemoteSync() {
+    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !firebaseUser || !userHydrated || hydratingUserId !== firebaseUser.uid) return;
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      firebaseDb = firebase.firestore();
+      firebaseStorage = window.firebase.storage ? firebase.storage() : null;
+      const uid = firebaseUser.uid;
+      const now = new Date().toISOString();
+      const scopes = new Set(dirtyScopes);
+      if (!scopes.size) return;
+      const batch = firebaseDb.batch();
+      batch.set(userRoot(uid), { uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 }, { merge:true });
+      if (scopes.has("page")) batch.set(userPage(uid), { page_id:"daily-notes", title:state.title, content:state.content, page_type:state.pageType, updated_at:now, schema_version:1 }, { merge:true });
+      if (scopes.has("settings")) batch.set(userRoot(uid).collection("settings").doc("preferences"), { theme:state.theme, muted:state.muted, updated_at:now, schema_version:1 }, { merge:true });
+      if (scopes.has("board")) {
+        const moodItems = await Promise.all(state.mood.slice(0, 450).map(item => prepareMoodItemForSync(item, uid)));
+        batch.set(userBoard(uid), { board_id:"moodboard", title:"Moodboard", item_count:state.mood.length, updated_at:now, schema_version:1 }, { merge:true });
+        moodItems.forEach(item => batch.set(userBoard(uid).collection("items").doc(String(item.id)), { ...item, updated_at:now, schema_version:1 }, { merge:true }));
+      }
+      await batch.commit();
+      scopes.forEach(scope => dirtyScopes.delete(scope));
       syncStatus = "synced"; updateSyncLabels();
-    } catch (_) { syncStatus = "saved locally"; updateSyncLabels(); }
+    } catch (_) { syncStatus = "sync paused · retrying"; updateSyncLabels(); }
   }
 
   function initFirebase() {
@@ -482,7 +575,24 @@
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       const auth = firebase.auth();
       auth.getRedirectResult().catch(error => { if (error?.code !== "auth/no-auth-event") showAuthModal(authErrorMessage(error)); });
-      auth.onAuthStateChanged(user => { firebaseUser = user || null; if (user) tryRemoteSync(); else if (activeView) renderAll(); });
+      auth.onAuthStateChanged(user => {
+        const previousUid = firebaseUser?.uid || lastAuthenticatedUid;
+        firebaseUser = user || null;
+        if (user) {
+          if (previousUid && previousUid !== user.uid) {
+            state = cloneState(defaultState);
+            document.documentElement.dataset.theme = state.theme;
+          }
+          lastAuthenticatedUid = user.uid;
+          renderAll();
+          hydrateUserData(user);
+        } else {
+          userHydrated = false;
+          hydratingUserId = "";
+          syncStatus = "guest · not saved";
+          if (activeView) renderAll();
+        }
+      });
       finishEmailLinkSignIn();
     } catch (_) {}
   }

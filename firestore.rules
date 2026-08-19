@@ -1,30 +1,72 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function to check auth
-    function isAuthenticated() {
+    function signedIn() {
       return request.auth != null;
     }
-    
-    // Helper function to check ownership
+
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return signedIn() && request.auth.uid == userId;
     }
 
-    // Projects collection
+    function createsOwner(userId) {
+      return signedIn() && request.resource.data.user_id == userId;
+    }
+
+    function preservesOwner(userId) {
+      return signedIn()
+        && resource.data.user_id == userId
+        && request.resource.data.user_id == userId;
+    }
+
+    // Vex's primary schema. Every user's data is isolated under their auth UID.
+    match /users/{userId} {
+      allow read, create, update: if isOwner(userId);
+      allow delete: if false;
+
+      match /pages/{pageId} {
+        allow read, create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      match /boards/{boardId} {
+        allow read, create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+
+        match /items/{itemId} {
+          allow read, create, update: if isOwner(userId);
+          allow delete: if isOwner(userId);
+        }
+      }
+
+      match /settings/{settingId} {
+        allow read, create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Legacy collections remain available only to the owning authenticated user.
     match /projects/{projectId} {
-      allow read, write: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow read: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if createsOwner(request.auth.uid);
+      allow update: if preservesOwner(request.auth.uid);
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
     }
 
-    // Files / Notes collection
     match /files/{fileId} {
-      allow read: if resource.data.is_public == true || (isAuthenticated() && resource.data.user_id == request.auth.uid);
-      allow create, update, delete: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow read: if resource.data.is_public == true
+        || (signedIn() && resource.data.user_id == request.auth.uid);
+      allow create: if createsOwner(request.auth.uid);
+      allow update: if preservesOwner(request.auth.uid);
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
     }
 
-    // Developer API Keys collection
     match /api_keys/{keyId} {
-      allow read, write: if isAuthenticated() && (resource == null || resource.data.user_id == request.auth.uid);
+      allow read: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if createsOwner(request.auth.uid);
+      allow update: if preservesOwner(request.auth.uid);
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
     }
   }
 }
