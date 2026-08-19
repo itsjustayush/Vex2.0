@@ -183,9 +183,19 @@
     });
   }
 
+  function updateFavicon(theme = state.theme) {
+    const favicon = document.getElementById("vex-favicon");
+    if (!favicon) return;
+    const filename = theme === "light" ? "favicon-light.svg" : theme === "zen" ? "favicon-zen.svg" : "favicon-dark.svg";
+    favicon.href = `/static/${filename}`;
+    const themeColors = { light:"#f6f1e9", dark:"#0e0e10", zen:"#e8efe8" };
+    document.querySelector("meta[name='theme-color']")?.setAttribute("content", themeColors[theme] || themeColors.dark);
+  }
+
   function setTheme(theme) {
     state.theme = theme;
     document.documentElement.dataset.theme = theme;
+    updateFavicon(theme);
     persist("settings");
     showToast(`${theme[0].toUpperCase()}${theme.slice(1)} theme`);
     renderAll();
@@ -535,6 +545,7 @@
       userHydrated = true;
       syncStatus = "synced";
       document.documentElement.dataset.theme = state.theme;
+      updateFavicon(state.theme);
       renderAll();
       if (!pageSnap.exists && !boardSnap.exists && !settingsSnap.exists && !itemsSnap.size) await tryRemoteSync();
     } catch (_) {
@@ -619,6 +630,8 @@
     document.querySelectorAll(".key.pressed").forEach(key => key.classList.remove("pressed"));
   });
 
+  document.documentElement.dataset.theme = state.theme;
+  updateFavicon(state.theme);
   initFirebase();
   renderAll();
 })();
