@@ -3,8 +3,6 @@ import hmac
 import os
 import secrets
 import time
-from email.utils import formataddr
-
 import requests
 
 from email_templates import vex_otp_email
@@ -27,8 +25,8 @@ def generate_code() -> str:
 
 
 def otp_digest(email: str, code: str) -> str:
-    secret = os.getenv("OTP_SECRET") or os.getenv("API_SECRET_KEY")
-    if not secret or secret == "vex-super-secret-jwt-key-change-in-prod":
+    secret = os.getenv("OTP_SECRET", "").strip()
+    if not secret or secret == "replace-with-a-long-random-secret":
         raise RuntimeError("OTP_SECRET must be configured before sending verification codes")
     return hmac.new(secret.encode("utf-8"), f"{email_key(email)}:{code}".encode("utf-8"), hashlib.sha256).hexdigest()
 

@@ -390,13 +390,13 @@ def request_otp():
 
     code = generate_code()
     try:
+        record = build_otp_record(email, code)
         resend_id = send_resend_otp(email, code)
     except RuntimeError as error:
         return jsonify({"detail": str(error)}), 503
     except Exception as error:
-        return jsonify({"detail": str(error)}), 502
+        return jsonify({"detail": "The verification email could not be sent. Please try again."}), 502
 
-    record = build_otp_record(email, code)
     record["provider_id"] = resend_id
     if db:
         try:
