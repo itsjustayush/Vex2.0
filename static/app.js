@@ -93,6 +93,22 @@
     emailInput.focus();
   }
 
+  function showOtpScreen(email, message = "") {
+    const modal = document.querySelector(".auth-modal-backdrop") || document.createElement("div");
+    modal.className = "auth-modal-backdrop";
+    modal.innerHTML = `<div class="auth-modal otp-modal" role="dialog" aria-modal="true" aria-labelledby="otp-title"><button class="auth-close" data-auth-action="close" aria-label="Close">×</button><div class="otp-window"><span class="otp-orbit" aria-hidden="true">◌</span><span class="otp-path">vex / auth / 01</span></div><span class="eyebrow"><b>✦</b> confirmation sent</span><h2 id="otp-title">Check your inbox.</h2><p class="auth-subtitle">We sent a secure sign-in message to <strong class="otp-email">${escapeHtml(email)}</strong>.</p><form data-otp-form><label for="auth-otp-value">ONE-TIME CODE</label><input id="auth-otp-value" class="otp-entry" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" aria-label="Six digit confirmation code" /><p class="otp-caption">Enter the six digits if your email provider shows a code, or open the Firebase sign-in link to complete authentication.</p><button class="primary-btn auth-email-btn" type="submit">Continue</button></form><div class="otp-actions"><button class="text-btn" data-otp-action="back">Use a different email</button><button class="text-btn" data-otp-action="resend">Resend email</button></div><p class="auth-message ${message ? "visible" : ""}" data-auth-message>${escapeHtml(message)}</p></div>`;
+    if (!modal.parentNode) document.body.appendChild(modal);
+    const input = modal.querySelector("#auth-otp-value");
+    const messageEl = modal.querySelector("[data-auth-message]");
+    modal.addEventListener("click", e => { if (e.target === modal) closeAuthModal(); });
+    modal.querySelector("[data-auth-action='close']").addEventListener("click", closeAuthModal);
+    modal.querySelector("[data-otp-action='back']").addEventListener("click", () => { closeAuthModal(); showAuthModal(); });
+    modal.querySelector("[data-otp-action='resend']").addEventListener("click", () => sendEmailLink(email, true));
+    modal.querySelector("[data-otp-form]").addEventListener("submit", e => { e.preventDefault(); const code = input.value.replace(/\D/g, ""); input.value = code; messageEl.textContent = code.length === 6 ? "Firebase passwordless email completes through the one-time link. Open it from your inbox to finish signing in." : "Enter all six digits, then open the Firebase email link to finish signing in."; messageEl.classList.add("visible"); });
+    input.addEventListener("input", () => { input.value = input.value.replace(/\D/g, "").slice(0, 6); });
+    input.focus();
+  }
+
   function closeAuthModal() { document.querySelector(".auth-modal-backdrop")?.remove(); }
 
   function authReady() {
@@ -119,7 +135,7 @@
     }
   }
 
-  async function sendEmailLink(email) {
+  async function sendEmailLink(email, keepOtpScreen = false) {
     if (!email) { showAuthModal("Enter your email address first."); return; }
     if (!authReady()) { showAuthModal("Firebase configuration is missing."); return; }
     try {
@@ -127,7 +143,8 @@
       const actionCodeSettings = { url: `${window.location.origin}${window.location.pathname}`, handleCodeInApp: true };
       await firebase.auth().sendSignInLinkToEmail(email, actionCodeSettings);
       localStorage.setItem("vex:pending-email", email);
-      showAuthModal("Check your inbox for the Vex confirmation link. It is valid for one sign-in only.");
+      if (keepOtpScreen) showOtpScreen(email, "A fresh confirmation email is on its way.");
+      else showOtpScreen(email, "Check your inbox for the Vex confirmation link.");
     } catch (error) { showAuthModal(authErrorMessage(error)); }
   }
 

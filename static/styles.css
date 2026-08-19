@@ -169,3 +169,16 @@ button, [role="button"] { cursor: pointer; }
 .auth-modal input { width:100%; height:47px; padding:0 13px; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); outline:none; }.auth-modal input:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft);}
 .auth-email-btn { width:100%; margin-top:12px; min-height:47px; }.auth-hint{margin:15px 0 0;color:var(--muted);font-size:11px;line-height:1.55;text-align:center}.auth-message{display:none;margin:16px 0 0;padding:11px 12px;border-radius:11px;background:var(--accent-soft);color:var(--accent);font-size:12px;line-height:1.45}.auth-message.visible{display:block;}
 @keyframes auth-fade { from { opacity:0; } to { opacity:1; } }
+.otp-modal { overflow:hidden; }
+.otp-window { position:relative; height:76px; margin:-10px -10px 22px; padding:15px 17px; border:1px solid var(--line); border-radius:16px; background:var(--bg); overflow:hidden; }
+.otp-window::before { content:""; position:absolute; inset:10px; border:1px dashed color-mix(in srgb, var(--accent) 50%, transparent); border-radius:10px; opacity:.75; }
+.otp-window::after { content:""; position:absolute; width:120px; height:120px; right:-33px; top:-50px; border:1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius:50%; box-shadow:0 0 0 9px color-mix(in srgb, var(--accent) 10%, transparent), 0 0 0 18px color-mix(in srgb, var(--accent) 6%, transparent); }
+.otp-orbit { position:relative; z-index:1; display:inline-grid; place-items:center; width:43px; height:43px; border:1px solid var(--accent); border-radius:50%; color:var(--accent); font:26px/1 "IBM Plex Mono",monospace; transform:rotate(-18deg); }
+.otp-path { position:absolute; z-index:1; right:16px; bottom:15px; color:var(--muted); font:10px "IBM Plex Mono",monospace; letter-spacing:.12em; text-transform:uppercase; }
+.otp-email { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; color:var(--ink); }
+.otp-entry { height:66px !important; padding:0 13px !important; border-style:dashed !important; border-width:1px !important; text-align:center; font:700 26px "IBM Plex Mono",monospace; letter-spacing:.3em; color:var(--accent) !important; }
+.otp-entry::placeholder { color:var(--muted); opacity:.55; letter-spacing:.3em; }
+.otp-entry:focus { border-style:solid !important; }
+.otp-caption { margin:11px 0 0; color:var(--muted); font-size:11px; line-height:1.5; text-align:center; }
+.otp-actions { display:flex; justify-content:space-between; gap:10px; margin-top:17px; }
+.text-btn { border:0; padding:0; background:transparent; color:var(--muted); font:11px "IBM Plex Mono",monospace; text-decoration:underline; text-underline-offset:3px; }.text-btn:hover{color:var(--accent);}
