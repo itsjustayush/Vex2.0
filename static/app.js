@@ -23,6 +23,11 @@
   let syncStatus = "local draft";
   let firebaseDb = null;
   let firebaseUser = null;
+  let soundContext = null;
+  let soundBuffer = null;
+  let soundConfig = null;
+  let soundLoadPromise = null;
+  const pressedCodes = new Set();
 
   function loadState() {
     try { return { ...defaultState, ...JSON.parse(localStorage.getItem(storageKey) || "{}")} } catch (_) { return { ...defaultState }; }
@@ -58,6 +63,90 @@
     toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
   }
 
+  function authErrorMessage(error) {
+    const code = error?.code || "";
+    if (code === "auth/unauthorized-domain") return `This domain is not authorized in Firebase. Add ${window.location.hostname} in Firebase Console → Authentication → Settings → Authorized domains.`;
+    if (code === "auth/operation-not-allowed") return "Enable Google and Email link sign-in in Firebase Console → Authentication → Sign-in method.";
+    if (code === "auth/popup-blocked") return "The popup was blocked. Try again or use the redirect option.";
+    if (code === "auth/invalid-email") return "Enter a valid email address.";
+    return error?.message || "Authentication could not be completed. Please try again.";
+  }
+
+  function showAuthModal(message = "") {
+    const existing = document.querySelector(".auth-modal-backdrop");
+    if (existing) {
+      const messageEl = existing.querySelector("[data-auth-message]");
+      if (messageEl) { messageEl.textContent = message; messageEl.classList.toggle("visible", Boolean(message)); }
+      return;
+    }
+    const modal = document.createElement("div");
+    modal.className = "auth-modal-backdrop";
+    modal.innerHTML = `<div class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button class="auth-close" data-auth-action="close" aria-label="Close">×</button><span class="eyebrow"><b>✦</b> your space, synced</span><h2 id="auth-title">Keep your thoughts close.</h2><p class="auth-subtitle">Sign in to unlock Firebase sync across devices. No password needed for email sign-in.</p><button class="google-auth-btn" data-auth-action="google"><span class="google-g">G</span> Continue with Google</button><div class="auth-divider"><span>or use email</span></div><form data-auth-form><label for="auth-email">Email address</label><input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required /><button class="primary-btn auth-email-btn" type="submit">Send confirmation link</button></form><p class="auth-hint">Firebase sends a secure one-time email link. Open it to finish sign-in or create your account.</p><p class="auth-message" data-auth-message>${escapeHtml(message)}</p></div>`;
+    document.body.appendChild(modal);
+    const emailInput = modal.querySelector("#auth-email");
+    const messageEl = modal.querySelector("[data-auth-message]");
+    if (message) messageEl.classList.add("visible");
+    modal.addEventListener("click", e => { if (e.target === modal) closeAuthModal(); });
+    modal.querySelector("[data-auth-action='close']").addEventListener("click", closeAuthModal);
+    modal.querySelector("[data-auth-action='google']").addEventListener("click", () => signInWithGoogle());
+    modal.querySelector("[data-auth-form]").addEventListener("submit", e => { e.preventDefault(); sendEmailLink(emailInput.value.trim()); });
+    emailInput.focus();
+  }
+
+  function closeAuthModal() { document.querySelector(".auth-modal-backdrop")?.remove(); }
+
+  function authReady() {
+    return Boolean(firebaseConfig.apiKey && window.firebase && firebase.apps);
+  }
+
+  async function signInWithGoogle(useRedirect = false) {
+    if (!authReady()) { showAuthModal("Firebase configuration is missing."); return; }
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope("email");
+      provider.addScope("profile");
+      if (useRedirect) return auth.signInWithRedirect(provider);
+      await auth.signInWithPopup(provider);
+      closeAuthModal();
+      showToast("Signed in with Google");
+    } catch (error) {
+      if (error?.code === "auth/popup-blocked" || error?.code === "auth/popup-closed-by-user" || error?.code === "auth/network-request-failed") {
+        try { await firebase.auth().signInWithRedirect(new firebase.auth.GoogleAuthProvider()); return; } catch (redirectError) { showAuthModal(authErrorMessage(redirectError)); return; }
+      }
+      showAuthModal(authErrorMessage(error));
+    }
+  }
+
+  async function sendEmailLink(email) {
+    if (!email) { showAuthModal("Enter your email address first."); return; }
+    if (!authReady()) { showAuthModal("Firebase configuration is missing."); return; }
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      const actionCodeSettings = { url: `${window.location.origin}${window.location.pathname}`, handleCodeInApp: true };
+      await firebase.auth().sendSignInLinkToEmail(email, actionCodeSettings);
+      localStorage.setItem("vex:pending-email", email);
+      showAuthModal("Check your inbox for the Vex confirmation link. It is valid for one sign-in only.");
+    } catch (error) { showAuthModal(authErrorMessage(error)); }
+  }
+
+  async function finishEmailLinkSignIn() {
+    if (!authReady() || !firebase.auth().isSignInWithEmailLink(window.location.href)) return;
+    const email = localStorage.getItem("vex:pending-email") || window.prompt("Confirm your email address to finish signing in:");
+    if (!email) return;
+    try {
+      await firebase.auth().signInWithEmailLink(email, window.location.href);
+      localStorage.removeItem("vex:pending-email");
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+      showToast("Email confirmed — welcome to Vex");
+    } catch (error) { showAuthModal(authErrorMessage(error)); }
+  }
+
+  async function signOut() {
+    try { if (authReady()) await firebase.auth().signOut(); firebaseUser = null; renderAll(); showToast("Signed out"); } catch (error) { showToast(authErrorMessage(error)); }
+  }
+
   function updateSyncLabels() {
     document.querySelectorAll("[data-sync-label]").forEach(el => {
       el.textContent = syncStatus === "saving" ? "saving" : syncStatus;
@@ -73,22 +162,62 @@
     renderAll();
   }
 
-  function playKeySound(key = "a") {
-    if (state.muted) return;
-    try {
+  function codeToLegacyId(code) {
+    if (!code) return "";
+    if (/^Key[A-Z]$/.test(code)) return String(code.charCodeAt(3));
+    if (/^Digit[0-9]$/.test(code)) return String(code.charCodeAt(5));
+    const ids = { Backquote:"192", Minus:"189", Equal:"187", BracketLeft:"219", BracketRight:"221", Backslash:"220", Semicolon:"186", Quote:"222", Comma:"188", Period:"190", Slash:"191", Space:"32", Tab:"9", CapsLock:"20", Enter:"13", Backspace:"8", ShiftLeft:"16", ShiftRight:"16", ControlLeft:"17", ControlRight:"17", AltLeft:"18", AltRight:"18", MetaLeft:"91", MetaRight:"92", Escape:"27", ArrowLeft:"37", ArrowUp:"38", ArrowRight:"39", ArrowDown:"40" };
+    return ids[code] || "";
+  }
+
+  async function loadSoundPack() {
+    if (soundLoadPromise) return soundLoadPromise;
+    soundLoadPromise = Promise.all([
+      fetch("/static/sound-config.json").then(response => response.json()),
+      fetch("/static/sound.ogg").then(response => response.arrayBuffer())
+    ]).then(async ([config, bytes]) => {
+      soundConfig = config;
       const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 130 + ((key.charCodeAt(0) || 2) % 8) * 17;
-      gain.gain.setValueAtTime(.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(.035, ctx.currentTime + .008);
-      gain.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + .08);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(); osc.stop(ctx.currentTime + .09);
+      if (AudioContext) {
+        soundContext = soundContext || new AudioContext();
+        soundBuffer = await soundContext.decodeAudioData(bytes);
+      }
+      return true;
+    }).catch(() => false);
+    return soundLoadPromise;
+  }
+
+  function fallbackKeySound(numericId = "65") {
+    try {
+      const audio = new Audio("/static/sound.ogg");
+      const definition = soundConfig?.defines?.[numericId] || soundConfig?.defines?.["65"];
+      audio.volume = .22;
+      if (definition) audio.currentTime = definition[0] / 1000;
+      const stop = () => { audio.pause(); };
+      audio.addEventListener("ended", stop, { once: true });
+      audio.play().then(() => setTimeout(stop, (definition?.[1] || 170))).catch(() => {});
     } catch (_) {}
+  }
+
+  function playKeySound(input = "KeyA") {
+    if (state.muted) return;
+    const code = typeof input === "string" ? input : input.code;
+    const numericId = typeof input === "object" && input.keyCode ? String(input.keyCode) : codeToLegacyId(code);
+    loadSoundPack().then(loaded => {
+      if (!loaded || !soundBuffer || !soundContext || !soundConfig) { fallbackKeySound(numericId); return; }
+      try {
+        if (soundContext.state === "suspended") soundContext.resume();
+        const definition = soundConfig.defines[numericId] || soundConfig.defines["65"];
+        const source = soundContext.createBufferSource();
+        const gain = soundContext.createGain();
+        source.buffer = soundBuffer;
+        gain.gain.value = .72;
+        source.connect(gain).connect(soundContext.destination);
+        const offset = definition[0] / 1000;
+        const duration = definition[1] / 1000;
+        source.start(0, offset, duration);
+      } catch (_) { fallbackKeySound(numericId); }
+    });
   }
 
   function formatPreview(markdown) {
@@ -134,6 +263,7 @@
         <div class="status"><span class="status-dot"></span><span data-sync-label>${syncStatus}</span></div>
         <button class="icon-btn" data-action="toggle-sound" aria-label="Toggle sound">${state.muted ? icon("soundOff") : icon("sound")}</button>
         <button class="pill-btn" data-action="cycle-theme"><span class="theme-swatch"></span><span>${state.theme}</span></button>
+        ${firebaseUser ? `<button class="pill-btn" data-action="sign-out">${escapeHtml(firebaseUser.displayName || firebaseUser.email || "Account")} · sign out</button>` : `<button class="ghost-btn" data-action="open-auth">Sign in</button>`}
         ${mode === "landing" ? `<button class="primary-btn" data-action="open-app">Open Vex ${icon("arrow")}</button>` : `<button class="ghost-btn" data-action="open-landing">Home</button>`}
       </div>
     </header>`;
@@ -163,8 +293,18 @@
     ["shift","Z","X","C","V","B","N","M",",",".","/","shift"],
     ["ctrl","alt","⌘","space","⌘","fn","←","↓","→"]
   ];
+
+  function keyCodeFor(key, rowIndex, keyIndex) {
+    const codeMap = { esc:"Escape", "⌫":"Backspace", tab:"Tab", caps:"CapsLock", "↵":"Enter", "\\":"Backslash", "[":"BracketLeft", "]":"BracketRight", ";":"Semicolon", "'":"Quote", ",":"Comma", ".":"Period", "/":"Slash", "-":"Minus", "=":"Equal", space:"Space", fn:"Fn", "←":"ArrowLeft", "↓":"ArrowDown", "→":"ArrowRight", alt:"AltLeft", ctrl:"ControlLeft" };
+    if (key === "shift") return keyIndex === 0 ? "ShiftLeft" : "ShiftRight";
+    if (key === "⌘") return keyIndex === 2 ? "MetaLeft" : "MetaRight";
+    if (/^[A-Z]$/.test(key)) return `Key${key}`;
+    if (/^\\d$/.test(key)) return `Digit${key}`;
+    return codeMap[key] || "";
+  }
+
   function renderKeyboard() {
-    return `<div class="keyboard-dock"><div class="keyboard-shell"><div class="keyboard-top"><span>vex / soft press</span><span>${state.muted ? "sound off" : "sound on"}</span></div>${rows.map(row => `<div class="key-row">${row.map(key => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
+    return `<div class="keyboard-dock"><div class="keyboard-shell"><div class="keyboard-top"><span>vex / soft press</span><span>${state.muted ? "sound off" : "sound on"}</span></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
   }
 
   function renderFormatBar() {
@@ -218,6 +358,8 @@
     document.querySelectorAll("[data-action='open-landing']").forEach(btn => btn.addEventListener("click", () => openView("landing")));
     document.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist(); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     document.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
+    document.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
+    document.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
   }
 
   function wireWorkspace(root) {
@@ -233,6 +375,8 @@
     root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist(); renderAll(); }));
     root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist(); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
+    root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
+    root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
     root.querySelectorAll("[data-action='add-note']").forEach(btn => btn.addEventListener("click", () => { state.mood.push({ id:"m" + Date.now(), type:"note", color:["yellow","pink","blue","green"][state.mood.length % 4], x:180 + state.mood.length * 48, y:160 + state.mood.length * 35, title:"new thought", text:"Double-click to make this yours." }); persist(); renderAll(); }));
     root.querySelectorAll("[data-action='export-page']").forEach(btn => btn.addEventListener("click", exportPage));
@@ -241,7 +385,7 @@
     const editor = root.querySelector(".editor-content");
     if (editor) {
       editor.addEventListener("input", () => { state.content = editorToMarkdown(editor); persist(); });
-      editor.addEventListener("keydown", e => { if (e.key.length === 1 || e.key === "Enter" || e.key === "Backspace") playKeySound(e.key); if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold"); } });
+      editor.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold"); } });
     }
     root.querySelectorAll("[data-format]").forEach(btn => btn.addEventListener("click", () => applyFormat(btn.dataset.format)));
     root.querySelectorAll(".key").forEach(key => key.addEventListener("click", () => handleVirtualKey(key)));
@@ -262,10 +406,16 @@
     state.content = editorToMarkdown(editor); persist(); playKeySound(kind); 
   }
 
+  function setPhysicalKey(code, pressed) {
+    if (!code) return;
+    document.querySelectorAll(`.key[data-code="${code}"]`).forEach(key => key.classList.toggle("pressed", pressed));
+  }
+
   function handleVirtualKey(keyEl) {
     const key = keyEl.dataset.key;
+    const code = keyEl.dataset.code;
     keyEl.classList.add("pressed"); setTimeout(() => keyEl.classList.remove("pressed"), 110);
-    playKeySound(key);
+    playKeySound(code);
     const editor = document.querySelector(".editor-content");
     if (!editor || ["tab","caps","shift","ctrl","alt","⌘","fn","←","↓","→"].includes(key)) return;
     editor.focus();
@@ -313,13 +463,33 @@
     if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps) return;
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      firebase.auth().onAuthStateChanged(user => { firebaseUser = user || null; if (user) tryRemoteSync(); });
+      const auth = firebase.auth();
+      auth.getRedirectResult().catch(error => { if (error?.code !== "auth/no-auth-event") showAuthModal(authErrorMessage(error)); });
+      auth.onAuthStateChanged(user => { firebaseUser = user || null; if (user) tryRemoteSync(); else if (activeView) renderAll(); });
+      finishEmailLinkSignIn();
     } catch (_) {}
   }
 
   document.addEventListener("keydown", e => {
+    if (e.isComposing || !e.code) return;
+    setPhysicalKey(e.code, true);
+    if (!pressedCodes.has(e.code)) {
+      pressedCodes.add(e.code);
+      if (!e.repeat) playKeySound(e);
+    }
     if ((e.metaKey || e.ctrlKey) && e.key === "1") { e.preventDefault(); state.moodboard=false; renderApp(); }
     if ((e.metaKey || e.ctrlKey) && e.key === "2") { e.preventDefault(); state.moodboard=true; renderApp(); }
+  });
+
+  document.addEventListener("keyup", e => {
+    if (!e.code) return;
+    pressedCodes.delete(e.code);
+    setPhysicalKey(e.code, false);
+  });
+
+  window.addEventListener("blur", () => {
+    pressedCodes.clear();
+    document.querySelectorAll(".key.pressed").forEach(key => key.classList.remove("pressed"));
   });
 
   initFirebase();

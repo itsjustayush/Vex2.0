@@ -345,7 +345,7 @@ def index():
 
 @app.route("/login")
 def login():
-    # Authentication remains in the repository for a later phase, but the prototype keeps it paused.
+    # The standalone legacy route stays redirected; authentication is available from the in-app modal.
     return redirect(url_for("index"))
 
 @app.route("/dashboard")
