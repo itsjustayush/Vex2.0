@@ -214,8 +214,14 @@
   function updateFavicon(theme = state.theme) {
     const favicon = document.getElementById("vex-favicon");
     if (!favicon) return;
-    const filename = theme === "light" ? "favicon-light.svg" : theme === "zen" ? "favicon-zen.svg" : "favicon-dark.svg";
-    favicon.href = `/static/${filename}`;
+    const palettes = {
+      light: { bg:"#f6f1e9", shadow:"#f26b4f", keycap:"#252426", stroke:"#1c1b1e", text:"#f7f4ec" },
+      dark: { bg:"#0e0e10", shadow:"#78ddcf", keycap:"#f7f4ec", stroke:"#e8e3d8", text:"#222126" },
+      zen: { bg:"#e8efe8", shadow:"#79a989", keycap:"#1f372d", stroke:"#173027", text:"#e7efe8" }
+    };
+    const palette = palettes[theme] || palettes.dark;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="${palette.bg}"/><rect x="13" y="16" width="38" height="38" rx="13" fill="${palette.shadow}" transform="rotate(-7 32 35)"/><rect x="10" y="9" width="42" height="42" rx="13" fill="${palette.keycap}" stroke="${palette.stroke}" stroke-width="1.5" transform="rotate(-7 31 30)"/><text x="31" y="35" fill="${palette.text}" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="800" text-anchor="middle" transform="rotate(-7 31 30)">vx</text></svg>`;
+    favicon.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     const themeColors = { light:"#f6f1e9", dark:"#0e0e10", zen:"#e8efe8" };
     document.querySelector("meta[name='theme-color']")?.setAttribute("content", themeColors[theme] || themeColors.dark);
   }
