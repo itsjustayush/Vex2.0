@@ -9,6 +9,7 @@ from functools import wraps
 from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory, Response
 from dotenv import load_dotenv
 import requests
+from otp_service import normalize_email, email_key, generate_code, build_otp_record, verify_digest, send_resend_otp, now_seconds
 
 # Load environment variables from .env file
 load_dotenv()
@@ -98,6 +99,8 @@ except Exception as e:
 # ==========================================
 # CONSOLIDATED IN-MEMORY DATA STORES (FALLBACK)
 # ==========================================
+OTP_MEMORY_STORE = {}
+
 IN_MEMORY_PROJECTS = [
     {
         "id": "prj_demo123456",
@@ -360,6 +363,109 @@ def sitemap_xml():
 def security_txt():
     body = "Contact: mailto:info.cometlabs@gmail.com\\nPreferred-Languages: en\\nCanonical: " + public_site_url() + "/.well-known/security.txt\\nPolicy: " + public_site_url() + "/SECURITY.md\\nExpires: 2027-08-19T00:00:00.000Z\\n"
     return Response(body, mimetype="text/plain")
+
+@app.route("/api/auth/request-otp", methods=["POST"])
+def request_otp():
+    payload = request.get_json(silent=True) or {}
+    email = normalize_email(payload.get("email"))
+    if not email or "@" not in email or len(email) > 254:
+        return jsonify({"detail": "Enter a valid email address."}), 400
+
+    challenge_id = email_key(email)
+    existing = None
+    if db:
+        try:
+            existing_doc = db.collection("otp_challenges").document(challenge_id).get()
+            if existing_doc.exists:
+                existing = existing_doc.to_dict()
+        except Exception:
+            existing = None
+    else:
+        existing = OTP_MEMORY_STORE.get(challenge_id)
+
+    now = now_seconds()
+    if existing and now < int(existing.get("resend_after", 0)):
+        wait = int(existing.get("resend_after", now)) - now
+        return jsonify({"detail": f"Please wait {max(1, wait)} seconds before requesting another code.", "retry_after": wait}), 429
+
+    code = generate_code()
+    try:
+        resend_id = send_resend_otp(email, code)
+    except RuntimeError as error:
+        return jsonify({"detail": str(error)}), 503
+    except Exception as error:
+        return jsonify({"detail": str(error)}), 502
+
+    record = build_otp_record(email, code)
+    record["provider_id"] = resend_id
+    if db:
+        try:
+            db.collection("otp_challenges").document(challenge_id).set(record)
+        except Exception as error:
+            return jsonify({"detail": f"The code was sent, but the verification store is unavailable: {error}"}), 503
+    else:
+        OTP_MEMORY_STORE[challenge_id] = record
+    return jsonify({"ok": True, "expires_in": int(record["expires_at"] - now), "email": email})
+
+
+@app.route("/api/auth/verify-otp", methods=["POST"])
+def verify_otp():
+    payload = request.get_json(silent=True) or {}
+    email = normalize_email(payload.get("email"))
+    code = str(payload.get("code") or "").strip()
+    if not email or len(code) != 6 or not code.isdigit():
+        return jsonify({"detail": "Enter the six-digit verification code."}), 400
+
+    challenge_id = email_key(email)
+    if db:
+        try:
+            challenge_doc = db.collection("otp_challenges").document(challenge_id).get()
+            record = challenge_doc.to_dict() if challenge_doc.exists else None
+        except Exception:
+            record = None
+    else:
+        record = OTP_MEMORY_STORE.get(challenge_id)
+
+    if not record:
+        return jsonify({"detail": "That code has expired or was not requested. Send a new code."}), 400
+    now = now_seconds()
+    if now > int(record.get("expires_at", 0)):
+        if db:
+            db.collection("otp_challenges").document(challenge_id).delete()
+        else:
+            OTP_MEMORY_STORE.pop(challenge_id, None)
+        return jsonify({"detail": "That code has expired. Send a new Vex code."}), 400
+    if int(record.get("attempts", 0)) >= int(record.get("max_attempts", 5)):
+        return jsonify({"detail": "Too many attempts. Send a new Vex code."}), 429
+    if not verify_digest(email, code, record):
+        record["attempts"] = int(record.get("attempts", 0)) + 1
+        if db:
+            db.collection("otp_challenges").document(challenge_id).set(record)
+        else:
+            OTP_MEMORY_STORE[challenge_id] = record
+        remaining = max(0, int(record.get("max_attempts", 5)) - record["attempts"])
+        return jsonify({"detail": f"That code is not correct. {remaining} attempt(s) remaining."}), 400
+
+    if not firebase_admin_initialized:
+        return jsonify({"detail": "Firebase Admin credentials are not configured on the server yet."}), 503
+    try:
+        try:
+            user = auth.get_user_by_email(email)
+        except Exception as lookup_error:
+            if "not found" not in str(lookup_error).lower():
+                raise
+            user = auth.create_user(email=email, email_verified=True)
+        custom_token = auth.create_custom_token(user.uid, {"email_verified": True})
+        if isinstance(custom_token, bytes):
+            custom_token = custom_token.decode("utf-8")
+        if db:
+            db.collection("otp_challenges").document(challenge_id).delete()
+        else:
+            OTP_MEMORY_STORE.pop(challenge_id, None)
+        return jsonify({"ok": True, "custom_token": custom_token, "email": email})
+    except Exception as error:
+        return jsonify({"detail": f"The code is valid, but account sign-in is not configured: {error}"}), 503
+
 
 @app.route("/login")
 def login():

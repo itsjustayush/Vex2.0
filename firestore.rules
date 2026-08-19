@@ -46,6 +46,11 @@ service cloud.firestore {
       }
     }
 
+    // OTP challenge records are server-only. The Flask backend uses Firebase Admin credentials.
+    match /otp_challenges/{challengeId} {
+      allow read, write: if false;
+    }
+
     // Legacy collections remain available only to the owning authenticated user.
     match /projects/{projectId} {
       allow read: if signedIn() && resource.data.user_id == request.auth.uid;
