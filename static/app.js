@@ -1198,8 +1198,15 @@
     updateFavicon(state.theme);
     renderAll();
     if (shareRouteId) setTimeout(resolveShareRoute, 0);
-    if (!pages.length && !boards.length && !rows.length && !Object.keys(settings).length && !Object.keys(data.typing || {}).length) return false;
-    return true;
+    const emptyAccount = !pages.length && !boards.length && !rows.length && !Object.keys(settings).length && !Object.keys(data.typing || {}).length;
+    if (emptyAccount && supabaseConfig.serverBridge) {
+      ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
+      syncStatus = "saving";
+      updateSyncLabels();
+      setTimeout(runRemoteSync, 0);
+      return true;
+    }
+    return !emptyAccount;
   }
 
   function clearSyncedScopes(scopes, versions) {
@@ -1227,8 +1234,11 @@
         try {
           if (await hydrateSupabaseUserData(user, requestId, requestUserId)) return;
         } catch (supabaseError) {
-          console.error("Vex Supabase hydration failed; falling back to Firebase:", supabaseError);
+          lastSyncError = supabaseError?.message || "Supabase hydration failed";
+          console.error("Vex Supabase hydration failed", supabaseError);
+          if (supabaseConfig.serverBridge) { syncStatus = "offline · retrying"; updateSyncLabels(); return; }
         }
+        if (supabaseConfig.serverBridge) { syncStatus = "offline · retrying"; updateSyncLabels(); return; }
       }
       hydratedUserId = "";
       userHydrated = false;
@@ -1363,8 +1373,12 @@
         if (await trySupabaseSync(scopes, versions)) { syncRetryDelay = 1000; return; }
       } catch (serverSupabaseError) {
         lastSyncError = serverSupabaseError?.message || "Server Supabase sync failed";
-        console.error("Vex server Supabase sync failed; trying client transports", serverSupabaseError);
+        console.error("Vex server Supabase sync failed", serverSupabaseError);
       }
+      syncRetryDelay = Math.min(15000, Math.round(syncRetryDelay * 1.7));
+      syncStatus = "saved locally · retrying";
+      updateSyncLabels();
+      return;
     }
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
