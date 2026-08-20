@@ -490,8 +490,8 @@ def render_page(template_name):
         template_name,
         firebase_config=FIREBASE_CONFIG,
         firebase_json=json.dumps(FIREBASE_CONFIG),
-        supabase_config={"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""},
-        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""}),
+        supabase_config={"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else "", "serverBridge": bool(SUPABASE_SERVICE_ROLE_KEY)},
+        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else "", "serverBridge": bool(SUPABASE_SERVICE_ROLE_KEY)}),
         configured_site_url=os.getenv("VEX_SITE_URL", request.url_root.rstrip("/")).rstrip("/")
     )
 

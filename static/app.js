@@ -202,15 +202,21 @@
   }
 
   async function readSupabaseState() {
-    let directError = null;
-    try { return await hydrateSupabaseDirect(); } catch (error) { directError = error; console.warn("Vex direct Supabase read failed; trying server bridge:", error); }
-    try { return await supabaseRequest("GET"); } catch (bridgeError) { throw new Error(`${directError?.message || "Direct Supabase read failed"}; ${bridgeError.message}`); }
+    let firstError = null;
+    const transports = supabaseConfig.serverBridge ? [() => supabaseRequest("GET"), () => hydrateSupabaseDirect()] : [() => hydrateSupabaseDirect(), () => supabaseRequest("GET")];
+    for (const transport of transports) {
+      try { return await transport(); } catch (error) { firstError = firstError || error; console.warn("Vex Supabase read transport failed:", error); }
+    }
+    throw new Error(firstError?.message || "Supabase read failed");
   }
 
   async function writeSupabaseState(payload) {
-    let directError = null;
-    try { return await syncSupabaseDirect(payload); } catch (error) { directError = error; console.warn("Vex direct Supabase write failed; trying server bridge:", error); }
-    try { return await supabaseRequest("PUT", payload); } catch (bridgeError) { throw new Error(`${directError?.message || "Direct Supabase write failed"}; ${bridgeError.message}`); }
+    let firstError = null;
+    const transports = supabaseConfig.serverBridge ? [() => supabaseRequest("PUT", payload), () => syncSupabaseDirect(payload)] : [() => syncSupabaseDirect(payload), () => supabaseRequest("PUT", payload)];
+    for (const transport of transports) {
+      try { return await transport(); } catch (error) { firstError = firstError || error; console.warn("Vex Supabase write transport failed:", error); }
+    }
+    throw new Error(firstError?.message || "Supabase write failed");
   }
 
   function supabasePageRow(page) {
@@ -1352,6 +1358,14 @@
     const scopes = new Set(dirtyScopes);
     if (!scopes.size) return;
     const versions = new Map([...scopes].map(scope => [scope, dirtyVersions[scope]]));
+    if (supabaseConfig.serverBridge) {
+      try {
+        if (await trySupabaseSync(scopes, versions)) { syncRetryDelay = 1000; return; }
+      } catch (serverSupabaseError) {
+        lastSyncError = serverSupabaseError?.message || "Server Supabase sync failed";
+        console.error("Vex server Supabase sync failed; trying client transports", serverSupabaseError);
+      }
+    }
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
