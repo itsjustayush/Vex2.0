@@ -2,6 +2,7 @@ import os
 import json
 import secrets
 import datetime
+import time
 import hmac
 import hashlib
 import base64
@@ -62,6 +63,8 @@ except Exception as e:
 # Firebase Admin SDK & Firestore client initialization
 firebase_admin_initialized = False
 db = None
+FIREBASE_CERTS_CACHE = {"certs": {}, "expires_at": 0}
+FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 
 try:
     import firebase_admin
@@ -218,6 +221,41 @@ def decode_jwt_token(token: str, secret: str = API_SECRET_KEY) -> dict:
     return json.loads(payload_json)
 
 
+def verify_firebase_id_token_fallback(token):
+    if not jwt or not token or not PROJECT_ID:
+        return None
+    try:
+        now = time.time()
+        if FIREBASE_CERTS_CACHE["expires_at"] <= now or not FIREBASE_CERTS_CACHE["certs"]:
+            cert_response = requests.get(FIREBASE_CERTS_URL, timeout=8)
+            cert_response.raise_for_status()
+            FIREBASE_CERTS_CACHE["certs"] = cert_response.json()
+            cache_control = cert_response.headers.get("cache-control", "")
+            max_age = 3600
+            for part in cache_control.split(","):
+                if "max-age=" in part:
+                    try: max_age = max(300, int(part.split("=", 1)[1]))
+                    except ValueError: pass
+            FIREBASE_CERTS_CACHE["expires_at"] = now + max_age
+        header = jwt.get_unverified_header(token)
+        cert = FIREBASE_CERTS_CACHE["certs"].get(header.get("kid"))
+        if not cert:
+            FIREBASE_CERTS_CACHE["expires_at"] = 0
+            cert_response = requests.get(FIREBASE_CERTS_URL, timeout=8)
+            cert_response.raise_for_status()
+            FIREBASE_CERTS_CACHE["certs"] = cert_response.json()
+            cert = FIREBASE_CERTS_CACHE["certs"].get(header.get("kid"))
+        if not cert:
+            return None
+        decoded = jwt.decode(token, cert, algorithms=["RS256"], audience=PROJECT_ID, issuer=f"https://securetoken.google.com/{PROJECT_ID}")
+        if not decoded.get("sub") or decoded.get("sub") != decoded.get("user_id", decoded.get("sub")):
+            return None
+        return decoded
+    except Exception as error:
+        print(f"Firebase ID-token fallback verification failed: {error}")
+        return None
+
+
 def require_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -283,6 +321,10 @@ def require_auth(f):
                     pass
 
             if not request_uid:
+                decoded_token = verify_firebase_id_token_fallback(token)
+                request_uid = decoded_token.get("sub") if decoded_token else None
+
+            if not request_uid:
                 try:
                     jwt_payload = decode_jwt_token(token)
                     key_id = jwt_payload.get("key_id")
@@ -334,6 +376,19 @@ def _supabase_request(method, table, *, params=None, payload=None, prefer="retur
 def _supabase_user_params(uid, select="*"):
     return {"user_id": f"eq.{uid}", "select": select}
 
+
+@app.route("/api/sync/health", methods=["GET"])
+def sync_health():
+    return jsonify({
+        "firebase_project": PROJECT_ID,
+        "firestore_database": FIRESTORE_DATABASE_ID,
+        "firebase_admin": bool(firebase_admin_initialized),
+        "firestore_client": bool(db),
+        "supabase_url": bool(SUPABASE_URL),
+        "supabase_publishable_key": bool(SUPABASE_PUBLISHABLE_KEY),
+        "supabase_service_role": bool(SUPABASE_SERVICE_ROLE_KEY),
+        "supabase_enabled": SUPABASE_ENABLED
+    })
 
 @app.route("/api/sync/state", methods=["GET"])
 @require_auth

@@ -96,6 +96,8 @@ button, [role="button"] { cursor: pointer; }
 .ghost-btn { background: transparent; }
 .kbd { font: 11px "IBM Plex Mono", monospace; color: var(--muted); border: 1px solid var(--line); border-bottom-color: var(--line-strong); background: var(--panel); padding: 3px 6px; border-radius: 6px; }
 .status { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; white-space:nowrap; }
+.status-action { border:0; padding:4px 6px; background:transparent; cursor:pointer; font:inherit; }
+.status-action:hover { color:var(--ink); }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 
 .workspace { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: calc(100vh - 72px); position: relative; z-index: 1; transition: grid-template-columns .28s var(--ease); }

@@ -35,6 +35,7 @@
   let saveInFlight = false;
   let saveQueued = false;
   let savePromise = null;
+  let syncRetryDelay = 1000;
   let activeView = window.location.hash === "#app" || shareRouteId ? "app" : "landing";
   let workspaceTab = "write";
   let selectedMoodId = "";
@@ -42,6 +43,7 @@
   let typingSession = { exerciseId: "home-row", visibleLength: 0, ready: false, value: "", errors: 0, startedAt: 0, finished: false };
   let typingAnimationTimer = null;
   let syncStatus = "guest · not saved";
+  let lastSyncError = "";
   let firebaseDb = null;
   let firebaseStorage = null;
   let firebaseUser = null;
@@ -142,7 +144,11 @@
   async function supabaseRequest(method, payload = null) {
     if (!supabaseConfig.enabled || !firebaseUser) return null;
     const token = await firebaseUser.getIdToken();
-    const response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let response;
+    try { response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined, signal:controller.signal }); }
+    finally { clearTimeout(timeout); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.detail || `Supabase bridge failed (${response.status}).`);
     return data;
@@ -151,7 +157,11 @@
   async function supabaseDirectRequest(method, table, query = "", payload = null, prefer = "return=minimal") {
     if (!supabaseConfig.enabled || !supabaseConfig.url || !supabaseConfig.publishableKey || !firebaseUser) return null;
     const token = await firebaseUser.getIdToken();
-    const response = await fetch(`${supabaseConfig.url}/rest/v1/${table}${query}`, { method, headers:{ apikey:supabaseConfig.publishableKey, Authorization:`Bearer ${token}`, "Content-Type":"application/json", Prefer:prefer }, body:payload == null ? undefined : JSON.stringify(payload) });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let response;
+    try { response = await fetch(`${supabaseConfig.url}/rest/v1/${table}${query}`, { method, headers:{ apikey:supabaseConfig.publishableKey, Authorization:`Bearer ${token}`, "Content-Type":"application/json", Prefer:prefer }, body:payload == null ? undefined : JSON.stringify(payload), signal:controller.signal }); }
+    finally { clearTimeout(timeout); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || data.error_description || `Supabase REST ${table} failed (${response.status}).`);
     return data;
@@ -225,7 +235,7 @@
       payload.boards = state.boards.slice(0, 50).map(board => supabaseBoardRow(board, boardItems[board.id]?.length || 0));
       payload.board_items = boardItems;
     }
-    if (scopes.has("page") || scopes.has("board") || scopes.has("settings")) payload.settings = { theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId };
+    if (scopes.has("settings")) payload.settings = { theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId };
     if (scopes.has("typing")) payload.typing = state.typingStats;
     return payload;
   }
@@ -393,7 +403,10 @@
   async function signOut() {
     try {
       clearTimeout(saveTimer);
-      if (firebaseUser && userHydrated && hydratedUserId === firebaseUser.uid && dirtyScopes.size) await flushRemoteSync();
+      if (firebaseUser && userHydrated && hydratedUserId === firebaseUser.uid && dirtyScopes.size) {
+        const flushed = await flushRemoteSync();
+        if (!flushed) { syncStatus = "saved locally · retrying"; updateSyncLabels(); showToast("Still saving — please try signing out again in a moment"); return; }
+      }
       hydrationRequestId += 1;
       if (authReady()) await firebase.auth().signOut();
       firebaseUser = null; userHydrated=false; hydratedUserId=""; hydratingUserId=""; dirtyScopes.clear(); selectedMoodId="";
@@ -404,6 +417,7 @@
   function updateSyncLabels() {
     document.querySelectorAll("[data-sync-label]").forEach(el => {
       el.textContent = syncStatus === "saving" ? "saving" : syncStatus;
+      el.title = lastSyncError || "";
       el.previousElementSibling?.classList.toggle("sync-saving", syncStatus === "saving");
     });
   }
@@ -609,7 +623,7 @@
         ${mode === "workspace" ? `<button class="icon-btn" data-action="toggle-sidebar" aria-label="Toggle sidebar">${icon("menu")}</button><div class="crumb"><span>workspace</span><span>/</span><strong>${state.title || "untitled"}</strong></div>` : `<div class="crumb"><strong>an open canvas for your thoughts</strong></div>`}
       </div>
       <div class="top-actions">
-        <div class="status"><span class="status-dot"></span><span data-sync-label>${syncStatus}</span></div>
+        <button class="status status-action" data-action="retry-sync" title="${escapeHtml(lastSyncError || "Retry sync")}"><span class="status-dot"></span><span data-sync-label>${syncStatus}</span></button>
         <button class="icon-btn" data-action="toggle-sound" aria-label="Toggle sound">${state.muted ? icon("soundOff") : icon("sound")}</button>
         <button class="pill-btn" data-action="cycle-theme"><span class="theme-swatch"></span><span>${state.theme}</span></button>
         ${firebaseUser ? `<button class="pill-btn" data-action="sign-out">${escapeHtml(firebaseUser.displayName || firebaseUser.email || "Account")} · sign out</button>` : `<button class="ghost-btn" data-action="open-auth">Sign in</button>`}
@@ -761,10 +775,11 @@
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
     root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
+    root.querySelectorAll("[data-action='retry-sync']").forEach(btn => btn.addEventListener("click", () => { if (firebaseUser) { syncStatus = "saving"; updateSyncLabels(); runRemoteSync(); } else showAuthModal(); }));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
     root.querySelectorAll("[data-action='open-pages']").forEach(btn => btn.addEventListener("click", showPagesModal));
     root.querySelectorAll("[data-action='new-board']").forEach(btn => btn.addEventListener("click", () => { ensureWorkspaceHistory(); const board = normalizeBoard({ id:makeEntityId("board"), title:"New moodboard", item_count:0, updated_at:new Date().toISOString() }, firebaseUser?.uid); state.boards.unshift(board); state.boardItems[board.id]=[]; setActiveBoard(board.id); state.moodboard=true; workspaceTab="write"; persist("board"); renderApp(); showToast("New moodboard created"); }));
-    root.querySelectorAll("[data-action='select-board']").forEach(btn => btn.addEventListener("click", () => { setActiveBoard(btn.dataset.boardId); state.moodboard=true; renderApp(); }));
+    root.querySelectorAll("[data-action='select-board']").forEach(btn => btn.addEventListener("click", () => { setActiveBoard(btn.dataset.boardId); state.moodboard=true; persist("settings"); renderApp(); }));
     root.querySelectorAll("[data-action='zoom-board']").forEach(btn => btn.addEventListener("click", () => { const action=btn.dataset.zoom; if (action === "in") state.boardZoom=Math.min(2.5, state.boardZoom + .1); if (action === "out") state.boardZoom=Math.max(.45, state.boardZoom - .1); if (action === "reset") { state.boardZoom=1; state.boardPan={x:0,y:0}; } renderApp(); }));
     root.querySelectorAll("[data-action='add-note']").forEach(btn => btn.addEventListener("click", () => {     const note = { id:makeEntityId("mood-piece"), type:"note", color:["yellow","pink","blue","green"][state.mood.length % 4], x:180 + state.mood.length * 48, y:160 + state.mood.length * 35, title:"new thought", text:"Double-click to make this yours.", fontSize:13, fontFamily:"Space Grotesk", fontWeight:500, fontStyle:"normal", textAlign:"left" };
  state.mood.push(note); selectedMoodId=note.id; persist("board"); renderAll(); }));
@@ -1298,7 +1313,8 @@
       if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
       userHydrated = false;
       hydratedUserId = "";
-      syncStatus = "sync unavailable · retrying";
+      lastSyncError = error?.message || "Workspace hydration failed";
+      syncStatus = "offline · retrying";
       console.error("Vex hydration failed", error);
       updateSyncLabels();
     }
@@ -1312,26 +1328,23 @@
       saveInFlight = false;
       savePromise = null;
       if (saveQueued || dirtyScopes.size) {
+        const shouldRunImmediately = saveQueued;
         saveQueued = false;
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(runRemoteSync, 140);
+        saveTimer = setTimeout(runRemoteSync, shouldRunImmediately ? 140 : syncRetryDelay);
       }
     });
     return savePromise;
   }
 
-  async function flushRemoteSync() {
+  async function flushRemoteSync(maxAttempts = 3) {
     clearTimeout(saveTimer);
-    while (dirtyScopes.size) {
-      if (saveInFlight) {
-        await (savePromise || Promise.resolve());
-      } else {
-        await runRemoteSync();
-      }
-      if (saveInFlight) continue;
-      if (!dirtyScopes.size) break;
-      await new Promise(resolve => setTimeout(resolve, 0));
+    for (let attempt = 0; attempt < maxAttempts && dirtyScopes.size; attempt += 1) {
+      if (saveInFlight) await (savePromise || Promise.resolve());
+      else await runRemoteSync();
+      if (dirtyScopes.size && !saveInFlight) await new Promise(resolve => setTimeout(resolve, Math.min(250, syncRetryDelay)));
     }
+    return dirtyScopes.size === 0;
   }
 
   async function tryRemoteSync() {
@@ -1339,13 +1352,6 @@
     const scopes = new Set(dirtyScopes);
     if (!scopes.size) return;
     const versions = new Map([...scopes].map(scope => [scope, dirtyVersions[scope]]));
-    if (supabaseConfig.enabled) {
-      try {
-        if (await trySupabaseSync(scopes, versions)) return;
-      } catch (supabaseError) {
-        console.error("Vex Supabase sync failed; falling back to Firebase:", supabaseError);
-      }
-    }
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       firebaseDb = firebase.firestore();
@@ -1373,10 +1379,22 @@
       }
       await firestoreRestBatchWrite(writes);
       clearSyncedScopes(scopes, versions);
+      syncRetryDelay = 1000;
+      lastSyncError = "";
       syncStatus = dirtyScopes.size ? "saving" : "synced"; updateSyncLabels();
-    } catch (error) {
-      syncStatus = "sync paused · retrying";
-      console.error("Vex named Firestore sync failed", error);
+    } catch (firebaseError) {
+      lastSyncError = firebaseError?.message || "Firestore sync failed";
+      console.error("Vex Firestore sync failed; trying Supabase fallback", firebaseError);
+      if (supabaseConfig.enabled) {
+        try {
+          if (await trySupabaseSync(scopes, versions)) { syncRetryDelay = 1000; return; }
+        } catch (supabaseError) {
+          lastSyncError = `${lastSyncError}; ${supabaseError?.message || "Supabase sync failed"}`;
+          console.error("Vex Supabase fallback sync failed", supabaseError);
+        }
+      }
+      syncRetryDelay = Math.min(15000, Math.round(syncRetryDelay * 1.7));
+      syncStatus = "saved locally · retrying";
       updateSyncLabels();
     }
   }
