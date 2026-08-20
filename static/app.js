@@ -143,28 +143,36 @@
 
   async function supabaseRequest(method, payload = null) {
     if (!supabaseConfig.enabled || !firebaseUser) return null;
-    const token = await firebaseUser.getIdToken();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    let response;
-    try { response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined, signal:controller.signal }); }
-    finally { clearTimeout(timeout); }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || `Supabase bridge failed (${response.status}).`);
-    return data;
+    let token = await firebaseUser.getIdToken();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let response;
+      try { response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined, signal:controller.signal }); }
+      finally { clearTimeout(timeout); }
+      if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); continue; }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `Supabase bridge failed (${response.status}).`);
+      return data;
+    }
+    throw new Error("Firebase session token could not be refreshed");
   }
 
   async function supabaseDirectRequest(method, table, query = "", payload = null, prefer = "return=minimal") {
     if (!supabaseConfig.enabled || !supabaseConfig.url || !supabaseConfig.publishableKey || !firebaseUser) return null;
-    const token = await firebaseUser.getIdToken();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    let response;
-    try { response = await fetch(`${supabaseConfig.url}/rest/v1/${table}${query}`, { method, headers:{ apikey:supabaseConfig.publishableKey, Authorization:`Bearer ${token}`, "Content-Type":"application/json", Prefer:prefer }, body:payload == null ? undefined : JSON.stringify(payload), signal:controller.signal }); }
-    finally { clearTimeout(timeout); }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || data.error_description || `Supabase REST ${table} failed (${response.status}).`);
-    return data;
+    let token = await firebaseUser.getIdToken();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let response;
+      try { response = await fetch(`${supabaseConfig.url}/rest/v1/${table}${query}`, { method, headers:{ apikey:supabaseConfig.publishableKey, Authorization:`Bearer ${token}`, "Content-Type":"application/json", Prefer:prefer }, body:payload == null ? undefined : JSON.stringify(payload), signal:controller.signal }); }
+      finally { clearTimeout(timeout); }
+      if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); continue; }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error_description || `Supabase REST ${table} failed (${response.status}).`);
+      return data;
+    }
+    throw new Error(`Supabase REST ${table} rejected the refreshed Firebase token`);
   }
 
   function supabaseUserFilter(uid, extra = "") {
@@ -1094,11 +1102,15 @@
   }
   async function firestoreRestRequest(url, options = {}) {
     if (!firebaseUser) throw new Error("Vex sync requires an authenticated Firebase user.");
-    const token = await firebaseUser.getIdToken();
-    const response = await fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization:`Bearer ${token}`, "Content-Type":"application/json" } });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error?.message || `Firestore sync failed (${response.status}).`);
-    return payload;
+    let token = await firebaseUser.getIdToken();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization:`Bearer ${token}`, "Content-Type":"application/json" } });
+      if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); continue; }
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error?.message || `Firestore sync failed (${response.status}).`);
+      return payload;
+    }
+    throw new Error("Firebase session token could not be refreshed");
   }
   async function firestoreRestList(path, pageSize = 100) {
     const payload = await firestoreRestRequest(`${vexFirestoreUrl(path)}?pageSize=${pageSize}`);

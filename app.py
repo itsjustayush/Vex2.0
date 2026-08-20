@@ -256,6 +256,24 @@ def verify_firebase_id_token_fallback(token):
         return None
 
 
+def verify_firebase_id_token_identity_toolkit(token):
+    if not token or not API_KEY:
+        return None
+    try:
+        response = requests.post(f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={API_KEY}", json={"idToken": token}, timeout=8)
+        if not response.ok:
+            print(f"Firebase Identity Toolkit token lookup failed ({response.status_code})")
+            return None
+        users = response.json().get("users") or []
+        if not users or not users[0].get("localId"):
+            return None
+        user = users[0]
+        return {"sub": user["localId"], "uid": user["localId"], "email": user.get("email")}
+    except Exception as error:
+        print(f"Firebase Identity Toolkit verification failed: {error}")
+        return None
+
+
 def require_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -317,11 +335,13 @@ def require_auth(f):
                     from firebase_admin import auth as fb_auth
                     decoded_token = fb_auth.verify_id_token(token)
                     request_uid = decoded_token.get("uid")
-                except Exception:
-                    pass
-
+                except Exception as error:
+                    app.logger.warning("Firebase Admin ID-token verification failed: %s", error)
             if not request_uid:
                 decoded_token = verify_firebase_id_token_fallback(token)
+                request_uid = decoded_token.get("sub") if decoded_token else None
+            if not request_uid:
+                decoded_token = verify_firebase_id_token_identity_toolkit(token)
                 request_uid = decoded_token.get("sub") if decoded_token else None
 
             if not request_uid:
@@ -379,8 +399,16 @@ def _supabase_user_params(uid, select="*"):
 
 @app.route("/api/sync/health", methods=["GET"])
 def sync_health():
+    admin_project = None
+    if firebase_admin_initialized:
+        try:
+            import firebase_admin
+            admin_project = firebase_admin.get_app().project_id
+        except Exception:
+            admin_project = None
     return jsonify({
         "firebase_project": PROJECT_ID,
+        "firebase_admin_project": admin_project,
         "firestore_database": FIRESTORE_DATABASE_ID,
         "firebase_admin": bool(firebase_admin_initialized),
         "firestore_client": bool(db),
