@@ -368,7 +368,8 @@ def supabase_sync_put():
         for page in (body.get("pages") or [])[:100]:
             page_id = str(page.get("id") or "").strip()
             if page_id:
-                writes.append({"id": page_id, "user_id": uid, "title": str(page.get("title") or "Untitled page"), "content": str(page.get("content") or ""), "page_type": str(page.get("page_type") or "ruled-single"), "updated_at": page.get("updated_at") or now, "metadata": {"schema_version": 1}})
+                incoming_metadata = page.get("metadata") if isinstance(page.get("metadata"), dict) else {}
+                writes.append({"id": page_id, "user_id": uid, "title": str(page.get("title") or "Untitled page"), "content": str(page.get("content") or ""), "page_type": str(page.get("page_type") or "ruled-single"), "updated_at": page.get("updated_at") or now, "metadata": {**incoming_metadata, "schema_version": 1, "entity_type": "note", "share_id": str(page.get("share_id") or incoming_metadata.get("share_id") or page_id)}})
         if writes:
             _supabase_request("POST", "vex_pages", params={"on_conflict": "user_id,id"}, payload=writes, prefer="resolution=merge-duplicates,return=minimal")
         board_rows = []
@@ -380,7 +381,8 @@ def supabase_sync_put():
                 continue
             board_items = [item for item in (body.get("board_items") or {}).get(board_id, [])[:500] if item.get("id") is not None]
             board_ids.append(board_id)
-            board_rows.append({"id": board_id, "user_id": uid, "title": str(board.get("title") or "Moodboard"), "item_count": len(board_items), "updated_at": board.get("updated_at") or now, "metadata": {"schema_version": 1}})
+            incoming_metadata = board.get("metadata") if isinstance(board.get("metadata"), dict) else {}
+            board_rows.append({"id": board_id, "user_id": uid, "title": str(board.get("title") or "Moodboard"), "item_count": len(board_items), "updated_at": board.get("updated_at") or now, "metadata": {**incoming_metadata, "schema_version": 1, "entity_type": "moodboard", "share_id": str(board.get("share_id") or incoming_metadata.get("share_id") or board_id)}})
             item_rows.extend({"id": str(item.get("id")), "user_id": uid, "board_id": board_id, "item_type": str(item.get("type") or "note"), "payload": item, "updated_at": now} for item in board_items)
         if board_rows:
             _supabase_request("POST", "vex_boards", params={"on_conflict": "user_id,id"}, payload=board_rows, prefer="resolution=merge-duplicates,return=minimal")
@@ -434,11 +436,18 @@ def render_page(template_name):
         firebase_config=FIREBASE_CONFIG,
         firebase_json=json.dumps(FIREBASE_CONFIG),
         supabase_config={"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""},
-        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""})
+        supabase_json=json.dumps({"enabled": SUPABASE_ENABLED, "url": SUPABASE_URL if SUPABASE_ENABLED else "", "publishableKey": SUPABASE_PUBLISHABLE_KEY if SUPABASE_ENABLED else ""}),
+        configured_site_url=os.getenv("VEX_SITE_URL", request.url_root.rstrip("/")).rstrip("/")
     )
 
 @app.route("/")
 def index():
+    return render_page("index.html")
+
+@app.route("/<string:share_id>")
+def shared_entity_shell(share_id):
+    if share_id.startswith(("n_", "b_")):
+        return render_page("index.html")
     return render_page("index.html")
 
 def public_site_url():

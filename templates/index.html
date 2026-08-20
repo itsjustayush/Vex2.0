@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    {% set site_url = request.url_root.rstrip('/') %}
+    {% set site_url = configured_site_url or request.url_root.rstrip('/') %}
     {% set page_url = site_url + request.path %}
     {% set social_image = site_url + url_for('static', filename='social-preview.svg') %}
     <meta name="theme-color" content="#0e0e10" />
@@ -52,6 +52,7 @@
     <script>
       window.VEX_FIREBASE_CONFIG = {{ firebase_json | safe }};
       window.VEX_SUPABASE_CONFIG = {{ supabase_json | safe }};
+      window.VEX_SITE_URL = {{ configured_site_url | tojson }};
     </script>
   </head>
   <body>
