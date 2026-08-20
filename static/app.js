@@ -4,7 +4,14 @@
   const firebaseConfig = window.VEX_FIREBASE_CONFIG || {};
   const supabaseConfig = window.VEX_SUPABASE_CONFIG || {};
   const storageKey = "vex:prototype:workspace";
-  const shareRouteId = (() => { const parts = window.location.pathname.split("/").filter(Boolean); const candidate = parts.length === 1 ? decodeURIComponent(parts[0]) : ""; return /^(?:n|b)_[A-Za-z0-9_-]{12,}$/.test(candidate) ? candidate : ""; })();
+  const shareRouteId = (() => {
+    const hashMatch = String(window.location.hash || "").match(/^#app((?:n|b)_[A-Za-z0-9_-]{12,})$/);
+    if (hashMatch) return decodeURIComponent(hashMatch[1]);
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    const candidate = parts.length === 1 ? decodeURIComponent(parts[0]) : "";
+    return /^(?:n|b)_[A-Za-z0-9_-]{12,}$/.test(candidate) ? candidate : "";
+  })();
+  const hasAppHash = /^#app(?:$|(?:n|b)_[A-Za-z0-9_-]{12,}$)/.test(String(window.location.hash || ""));
   const defaultState = {
     theme: "dark",
     pageType: "ruled-single",
@@ -36,7 +43,7 @@
   let saveQueued = false;
   let savePromise = null;
   let syncRetryDelay = 1000;
-  let activeView = window.location.hash === "#app" || shareRouteId ? "app" : "landing";
+  let activeView = hasAppHash || shareRouteId ? "app" : "landing";
   let workspaceTab = "write";
   let selectedMoodId = "";
   let mobileInputTarget = "body";
@@ -898,7 +905,7 @@
 
   function shareUrl(id) {
     const origin = String(window.VEX_SITE_URL || window.location.origin).replace(/\/$/, "");
-    return `${origin}/${encodeURIComponent(id)}`;
+    return `${origin}/#app${encodeURIComponent(id)}`;
   }
 
   function currentPage() {
