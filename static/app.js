@@ -488,7 +488,7 @@
         soundBuffer = await soundContext.decodeAudioData(bytes);
       }
       return true;
-    }).catch(() => false);
+    }).catch(() => { soundLoadPromise = null; return false; });
     return soundLoadPromise;
   }
 
@@ -507,11 +507,11 @@
   function playKeySound(input = "KeyA") {
     if (state.muted) return;
     const code = typeof input === "string" ? input : input.code;
-    const numericId = typeof input === "object" && input.keyCode ? String(input.keyCode) : codeToLegacyId(code);
+    const numericId = typeof input === "object" && input.keyCode ? String(input.keyCode) : (/^\d+$/.test(String(code)) ? String(code) : codeToLegacyId(code));
     loadSoundPack().then(loaded => {
       if (!loaded || !soundBuffer || !soundContext || !soundConfig) { fallbackKeySound(numericId); return; }
       try {
-        if (soundContext.state === "suspended") soundContext.resume();
+        if (soundContext.state === "suspended") soundContext.resume().catch(() => {});
         const definition = soundConfig.defines[numericId] || soundConfig.defines["65"];
         const source = soundContext.createBufferSource();
         const gain = soundContext.createGain();
@@ -645,7 +645,7 @@
       </div>
       <div class="top-actions">
         <button class="status status-action" data-action="retry-sync" title="${escapeHtml(lastSyncError || "Retry sync")}"><span class="status-dot"></span><span data-sync-label>${syncStatus}</span></button>
-        <button class="icon-btn" data-action="toggle-sound" aria-label="Toggle sound">${state.muted ? icon("soundOff") : icon("sound")}</button>
+        <button class="icon-btn sound-toggle" data-action="toggle-sound" aria-label="${state.muted ? "Turn sound on" : "Mute keyboard sounds"}" aria-pressed="${state.muted ? "true" : "false"}">${state.muted ? icon("soundOff") : icon("sound")}</button>
         <button class="pill-btn" data-action="cycle-theme"><span class="theme-swatch"></span><span>${state.theme}</span></button>
         ${firebaseUser ? `<button class="pill-btn" data-action="sign-out">${escapeHtml(firebaseUser.displayName || firebaseUser.email || "Account")} · sign out</button>` : `<button class="ghost-btn" data-action="open-auth">Sign in</button>`}
         ${mode === "landing" ? `<button class="primary-btn" data-action="open-app">Open Vex ${icon("arrow")}</button>` : `<button class="ghost-btn" data-action="open-landing">Home</button>`}
@@ -779,7 +779,6 @@
   }
 
   function wireWorkspace(root) {
-    wireGlobal();
     root.querySelectorAll("[data-action='toggle-sidebar']").forEach(btn => btn.addEventListener("click", () => {
       const workspace = root.querySelector(".workspace");
       workspace?.classList.toggle("sidebar-hidden");
