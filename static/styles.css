@@ -351,3 +351,6 @@ button, [role="button"] { cursor: pointer; }
 .creator-credit a:hover { color: var(--accent); text-decoration: none; }
 .side-note strong a:focus-visible,
 .creator-credit a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+.sound-icon { display: block; width: 18px; height: 18px; flex: 0 0 18px; }
+.sound-toggle { line-height: 0; }

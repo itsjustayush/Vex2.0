@@ -283,7 +283,12 @@
   }
 
   function icon(name) {
-    const icons = { menu:"☰", search:"⌕", plus:"+", folder:"▦", note:"✦", board:"▧", settings:"⚙", sound:"◖", soundOff:"◗", arrow:"↗", download:"↓", close:"×", bold:"B", italic:"I", code:"<>" };
+    const icons = {
+      menu:"☰", search:"⌕", plus:"+", folder:"▦", note:"✦", board:"▧", settings:"⚙",
+      sound:'<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z" fill="currentColor"/><path d="M16 9.2a4 4 0 0 1 0 5.6M18.8 6.4a8 8 0 0 1 0 11.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      soundOff:'<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z" fill="currentColor"/><path d="m16 9 5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      arrow:"↗", download:"↓", close:"×", bold:"B", italic:"I", code:"<>"
+    };
     return icons[name] || name;
   }
 
