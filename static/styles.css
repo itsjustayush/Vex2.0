@@ -343,3 +343,11 @@ button, [role="button"] { cursor: pointer; }
   .history-modal { max-height: calc(100svh - 28px); }
   .mood-inspector { overflow-x: hidden; }
 }
+
+/* Theme-aware builder credit link. */
+.side-note strong a,
+.creator-credit a { color: var(--ink); text-decoration: none; text-underline-offset: 0; }
+.side-note strong a:hover,
+.creator-credit a:hover { color: var(--accent); text-decoration: none; }
+.side-note strong a:focus-visible,
+.creator-credit a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
