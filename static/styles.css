@@ -354,3 +354,27 @@ button, [role="button"] { cursor: pointer; }
 
 .sound-icon { display: block; width: 18px; height: 18px; flex: 0 0 18px; }
 .sound-toggle { line-height: 0; }
+
+/* Prevent narrow-device viewport collapse and horizontal clipping. */
+html, body, #app { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; }
+.app-shell, .landing, .landing-shell, .workspace, .editor-stage { min-width: 0; max-width: 100%; }
+@media (max-width: 820px) {
+  .app-shell { width: 100%; }
+  .workspace { width: 100%; grid-template-columns: minmax(0, 1fr); }
+  .editor-stage { width: 100%; min-width: 0; overflow: hidden; }
+  .page-card, .moodboard, .typing-layout, .typing-card { width: 100%; min-width: 0; max-width: 100%; }
+  .page-title { min-width: 0; max-width: 100%; }
+  .demo-wrap, .demo-frame, .demo-frame .app-shell { width: 100%; max-width: 100%; min-width: 0; }
+  .demo-frame { overflow: hidden; }
+  .demo-frame .app-shell { height: clamp(620px, 100svh, 760px); min-height: 620px; max-height: none; }
+  .demo-frame .workspace { width: 100%; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  .demo-frame .editor-stage { width: 100%; padding-inline: 10px; }
+  .keyboard-dock { max-width: 100%; }
+  .keyboard-shell { width: 100%; }
+}
+
+@media (max-width: 390px) {
+  .format-bar { display: none; }
+  .editor-stage { padding-bottom: 190px; }
+  .typing-stage { padding-bottom: 190px; }
+}
