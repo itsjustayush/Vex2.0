@@ -564,10 +564,10 @@
   }
 
   const typingExercises = [
-    { id:"home-row", level:"warm up", title:"Home row drift", text:"asdf jkl; asdf jkl; keep your hands light and let the rhythm settle." },
-    { id:"soft-focus", level:"focus", title:"Soft focus", text:"Small steps become a practice when you return to them with care." },
-    { id:"clear-thoughts", level:"flow", title:"Clear thoughts", text:"Write the next true sentence before you decide whether it is good." },
-    { id:"tiny-sprint", level:"sprint", title:"Tiny sprint", text:"A little momentum is enough to make the blank page feel friendly." }
+    { id:"home-row", level:"warm up", title:"A calm beginning", text:"Begin with a steady pace. Let each finger return to its place, and allow the sentence to find its rhythm before you try to go faster." },
+    { id:"soft-focus", level:"focus", title:"Make room for focus", text:"Good ideas rarely arrive all at once. Give one thought your full attention, follow it for a few lines, and let the useful details appear." },
+    { id:"clear-thoughts", level:"flow", title:"Write it clearly", text:"Writing is a way to notice what you think. Start with the simplest honest sentence, then shape it until another person can see the idea too." },
+    { id:"tiny-sprint", level:"sprint", title:"Keep the momentum", text:"When a task feels too large, choose one small next step. A few focused minutes can turn hesitation into movement and a blank page into progress." }
   ];
 
   function currentTypingExercise() { return typingExercises.find(exercise => exercise.id === typingSession.exerciseId) || typingExercises[0]; }
