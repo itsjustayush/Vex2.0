@@ -417,3 +417,15 @@ html, body, #app { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidde
   .keyboard-toggle { right: 9px; bottom: 9px; width: 37px; height: 37px; border-radius: 11px; }
   .keyboard-icon { width: 17px; height: 17px; }
 }
+
+
+.typing-source {
+  margin: -8px 0 12px;
+  color: var(--muted);
+  font: 10px/1.4 "IBM Plex Mono", monospace;
+}
+.typing-source a { color: var(--accent); text-decoration: none; text-underline-offset: 3px; }
+.typing-source a:hover { text-decoration: underline; }
+@media (max-width: 520px) {
+  .typing-source { margin-top: -4px; font-size: 9px; }
+}
