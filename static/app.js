@@ -17,6 +17,7 @@
     pageType: "ruled-single",
     pageId: "daily-notes",
     muted: false,
+    keyboardVisible: true,
     title: "A softer place to think",
     content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful.\n\n**Try typing** with the keyboard below, or switch to a moodboard when words need a little more space.\n\n`Inline code` · $E = mc^2$",
     typingStats: { completed: 0, bestWpm: 0, bestAccuracy: 0, lastWpm: 0, lastAccuracy: 0, streak: 0 },
@@ -287,6 +288,7 @@
       menu:"☰", search:"⌕", plus:"+", folder:"▦", note:"✦", board:"▧", settings:"⚙",
       sound:'<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z" fill="currentColor"/><path d="M16 9.2a4 4 0 0 1 0 5.6M18.8 6.4a8 8 0 0 1 0 11.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
       soundOff:'<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z" fill="currentColor"/><path d="m16 9 5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+      keyboard:'<svg class="keyboard-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 9h1M9 9h1M12.5 9h1M16 9h1M5.5 12h1M9 12h1M12.5 12h1M16 12h1M7 15h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
       arrow:"↗", download:"↓", close:"×", bold:"B", italic:"I", code:"<>"
     };
     return icons[name] || name;
@@ -694,7 +696,8 @@
   }
 
   function renderKeyboard() {
-    return `<div class="keyboard-dock"><div class="keyboard-shell"><div class="keyboard-top"><span>vex / soft press</span><span>${state.muted ? "sound off" : "sound on"}</span></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
+    const keyboardLabel = state.keyboardVisible ? "Hide Vex keyboard" : "Show Vex keyboard";
+    return `<button class="keyboard-toggle ${state.keyboardVisible ? "active" : ""}" data-action="toggle-keyboard" aria-label="${keyboardLabel}" aria-expanded="${state.keyboardVisible ? "true" : "false"}" title="${keyboardLabel}">${icon("keyboard")}</button><div class="keyboard-dock ${state.keyboardVisible ? "" : "is-hidden"}" aria-hidden="${state.keyboardVisible ? "false" : "true"}"><div class="keyboard-shell"><div class="keyboard-top"><span>vex / soft press</span><span>${state.muted ? "sound off" : "sound on"}</span></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
   }
 
   function renderFormatBar() {
@@ -731,7 +734,7 @@
   }
 
   function mountWorkspace(host, { embedded = false } = {}) {
-    host.innerHTML = `<div class="app-shell ${embedded ? "embedded-app" : ""}" data-theme-root><div class="workspace ${embedded ? "" : ""}">${renderSidebar()}${state.moodboard ? renderMoodboard() : renderEditor()}</div>${renderKeyboard()}</div>`;
+    host.innerHTML = `<div class="app-shell ${embedded ? "embedded-app" : ""} ${state.keyboardVisible ? "" : "keyboard-hidden"}" data-theme-root><div class="workspace ${embedded ? "" : ""}">${renderSidebar()}${state.moodboard ? renderMoodboard() : renderEditor()}</div>${renderKeyboard()}</div>`;
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(host);
   }
@@ -746,7 +749,7 @@
 
   function renderApp() {
     const mainView = workspaceTab === "typing" ? renderTyping() : state.moodboard ? renderMoodboard() : renderEditor();
-    document.getElementById("app").innerHTML = `<div class="app-shell"><div>${renderTopbar("workspace")}</div><div class="workspace">${renderSidebar()}${mainView}</div>${renderKeyboard()}</div>`;
+    document.getElementById("app").innerHTML = `<div class="app-shell ${state.keyboardVisible ? "" : "keyboard-hidden"}"><div>${renderTopbar("workspace")}</div><div class="workspace">${renderSidebar()}${mainView}</div>${renderKeyboard()}</div>`;
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(document.getElementById("app"));
     if (workspaceTab === "typing" && !typingSession.ready) resetTypingSession(typingSession.exerciseId);
@@ -797,6 +800,7 @@
     root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; const page = normalizePage({ id:makeEntityId("note"), title:"Untitled page", content:"", page_type:"ruled-single", updated_at:new Date().toISOString() }, firebaseUser?.uid); state.pages.unshift(page); state.pageId = page.id; state.title = page.title; state.content = page.content; state.pageType = page.page_type; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
     root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist("page"); renderAll(); }));
     root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
+    root.querySelectorAll("[data-action='toggle-keyboard']").forEach(btn => btn.addEventListener("click", () => { state.keyboardVisible = !state.keyboardVisible; persist("settings"); renderAll(); showToast(state.keyboardVisible ? "Vex keyboard shown" : "Vex keyboard hidden"); }));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
     root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
@@ -1207,6 +1211,7 @@
     state.pageType = activePage?.page_type || "ruled-single";
     state.theme = settings.theme || state.theme;
     if (typeof settings.muted === "boolean") state.muted = settings.muted;
+    if (typeof settings.keyboard_visible === "boolean") state.keyboardVisible = settings.keyboard_visible;
     state.typingStats = { ...defaultState.typingStats, ...(data.typing || {}) };
     state.activeBoardId = settings.active_board_id && state.boards.some(board => board.id === settings.active_board_id) ? settings.active_board_id : state.boards[0]?.id || "moodboard";
     ensureWorkspaceHistory();
@@ -1330,6 +1335,7 @@
         const settings = settingsDoc;
         if (settings.theme) state.theme = settings.theme;
         if (typeof settings.muted === "boolean") state.muted = settings.muted;
+        if (typeof settings.keyboard_visible === "boolean") state.keyboardVisible = settings.keyboard_visible;
       }
       ensureWorkspaceHistory();
       const firstBoard = state.boards[0];
@@ -1414,7 +1420,7 @@
         rememberCurrentPage();
         state.pages.slice(0, 100).forEach(page => writes.push({ path:`users/${uid}/pages/${page.id}`, data:{ ...page, schema_version:1 } }));
       }
-      if (scopes.has("settings")) writes.push({ path:`users/${uid}/settings/preferences`, data:{ theme:state.theme, muted:state.muted, active_page_id:state.pageId, active_board_id:state.activeBoardId, updated_at:now, schema_version:1 } });
+      if (scopes.has("settings")) writes.push({ path:`users/${uid}/settings/preferences`, data:{ theme:state.theme, muted:state.muted, keyboard_visible:state.keyboardVisible, active_page_id:state.pageId, active_board_id:state.activeBoardId, updated_at:now, schema_version:1 } });
       if (scopes.has("typing")) writes.push({ path:`users/${uid}/typing/stats`, data:{ ...state.typingStats, updated_at:now, schema_version:1 } });
       if (scopes.has("board")) {
         rememberCurrentBoard();

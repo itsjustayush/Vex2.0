@@ -378,3 +378,42 @@ html, body, #app { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidde
   .editor-stage { padding-bottom: 190px; }
   .typing-stage { padding-bottom: 190px; }
 }
+
+
+/* Floating Vex keyboard visibility control. */
+.keyboard-toggle {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 40;
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--panel-solid) 90%, transparent);
+  color: var(--muted);
+  box-shadow: var(--shadow-small);
+  backdrop-filter: blur(18px);
+  transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.keyboard-toggle:hover { color: var(--ink); background: var(--panel-solid); transform: translateY(-2px); }
+.keyboard-toggle.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.keyboard-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.keyboard-icon { display: block; width: 20px; height: 20px; }
+.keyboard-dock.is-hidden { display: none; }
+.keyboard-hidden .editor-stage { padding-bottom: 38px; }
+.keyboard-hidden .typing-stage { padding-bottom: 38px; }
+.keyboard-hidden .mood-inspector { bottom: 20px; }
+@media (max-width: 820px) {
+  .keyboard-toggle { right: 12px; bottom: 12px; width: 40px; height: 40px; border-radius: 12px; }
+  .keyboard-icon { width: 18px; height: 18px; }
+  .keyboard-hidden .editor-stage { padding-bottom: 24px; }
+  .keyboard-hidden .typing-stage { padding-bottom: 24px; }
+  .keyboard-hidden .mood-inspector { bottom: 12px; }
+}
+@media (max-width: 390px) {
+  .keyboard-toggle { right: 9px; bottom: 9px; width: 37px; height: 37px; border-radius: 11px; }
+  .keyboard-icon { width: 17px; height: 17px; }
+}
