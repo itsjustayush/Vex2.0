@@ -1,0 +1,25 @@
+{
+  "name": "vex",
+  "version": "2.0.0",
+  "description": "Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs"
+  },
+  "dependencies": {
+    "@google/genai": "latest",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

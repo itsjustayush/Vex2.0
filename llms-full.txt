@@ -1,0 +1,29 @@
+# Vex 2.0 — Full System Context & Technical Documentation
+
+Vex is a calm, colorful writing workspace combining Markdown notes, LaTeX equations, tactile keyboard sound simulation, and infinite visual moodboards.
+
+## Architecture Overview
+- **Frontend Engine**: Pure TypeScript/ESM workspace rendering with custom mechanical keyboard dock, audio synthesis, and fluid 2D canvas manipulation.
+- **Backend Architecture**: Node.js and Express RESTful API server serving static assets, health checks, developer keys, and AI synthesis on port 3000.
+- **Cloud Persistence**: Google Cloud Firestore with real-time multi-device sync, batch writes, and automated snapshot version history.
+- **AI Synthesis**: Powered by `@google/genai` running Gemini 3.8 Flash (`gemini-3.8-flash`) for note summarization, thought structuring, and coding assistance.
+
+## Key Routes & Pages
+- `/` — Interactive workspace and public landing page with live interactive demo.
+- `/docs` — Documentation covering Markdown shortcuts, LaTeX math syntax, tactile sound engine, and keyboard layouts.
+- `/status` — Live service telemetry, Firestore connectivity, and Gemini API operational status.
+- `/settings` — User preferences, theme controls (Dark, Light, Zen), and developer API key generator.
+- `/api/v1/notes` — RESTful notes management with search and historical version snapshots.
+- `/api/v1/ai/chat` — Context-aware AI synthesis using Gemini 3.8 Flash.
+
+## Keyboard Shortcuts
+- `⌘ + 1` (or `Ctrl + 1`): Switch to Daily Notes editor.
+- `⌘ + 2` (or `Ctrl + 2`): Switch to Infinite Moodboard canvas.
+- `⌘ + 3` (or `Ctrl + 3`): Switch to Enhance Typing practice.
+- `Esc`: Dismiss modal dialogues and inspectors.
+
+## Creator & Attribution
+- Author: Ayush Bhattacharya
+- Email: info.cometlabs@gmail.com
+- Repository: https://github.com/itsjustayush/Vex2.0
+- Inspiration: https://keythm.aayushbharti.in/

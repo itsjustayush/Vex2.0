@@ -3,12 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    {% set site_url = configured_site_url or request.url_root.rstrip('/') %}
-    {% set page_url = site_url + request.path %}
-    {% set social_image = site_url + url_for('static', filename='social-preview.svg') %}
     <meta name="theme-color" content="#0e0e10" />
-    <link id="vex-favicon" rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" />
-    <link rel="canonical" href="{{ page_url }}" />
+    <link id="vex-favicon" rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
     <meta name="author" content="Ayush Bhattacharya" />
     <meta name="creator" content="Ayush Bhattacharya" />
     <meta name="description" content="Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
@@ -16,43 +12,29 @@
     <meta name="googlebot" content="index, follow" />
     <meta name="keywords" content="writing workspace, Markdown notes, LaTeX editor, moodboard app, distraction-free writing, creative thinking" />
     <link rel="me" href="https://github.com/itsjustayush" />
-    <title>Vex — Calm Writing Workspace, Markdown Notes & Moodboards</title>
+    <title>Vex - Networked Thought & AI Workspace</title>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Vex" />
-    <meta property="og:title" content="Vex — Make room for good thoughts" />
-    <meta property="og:description" content="A calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
-    <meta property="og:url" content="{{ page_url }}" />
-    <meta property="og:image" content="{{ social_image }}" />
+    <meta property="og:title" content="Vex - Networked Thought & AI Workspace" />
+    <meta property="og:description" content="Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
+    <meta property="og:image" content="/static/social-preview.svg" />
     <meta property="og:image:alt" content="Vex writing workspace with a calm dark interface" />
     <meta property="og:image:type" content="image/svg+xml" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Vex — Make room for good thoughts" />
-    <meta name="twitter:description" content="A calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
-    <meta name="twitter:image" content="{{ social_image }}" />
+    <meta name="twitter:title" content="Vex - Networked Thought & AI Workspace" />
+    <meta name="twitter:description" content="Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
+    <meta name="twitter:image" content="/static/social-preview.svg" />
     <meta name="twitter:image:alt" content="Vex writing workspace with a calm dark interface" />
-    <script type="application/ld+json">{{ {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Vex",
-      "url": page_url,
-      "description": "A calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards.",
-      "applicationCategory": "ProductivityApplication",
-      "operatingSystem": "Web",
-      "image": social_image,
-      "author": {"@type": "Person", "name": "Ayush Bhattacharya", "url": "https://github.com/itsjustayush"},
-      "creator": {"@type": "Person", "name": "Ayush Bhattacharya", "email": "info.cometlabs@gmail.com", "url": "https://github.com/itsjustayush"},
-      "sameAs": ["https://github.com/itsjustayush", "https://github.com/itsjustayush/Vex2.0", "https://keythm.aayushbharti.in/"]
-    } | tojson }}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
-    <link rel="preload" href="{{ url_for('static', filename='sound.ogg') }}" as="audio" type="audio/ogg" />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="preload" href="/static/sound.ogg" as="audio" type="audio/ogg" />
     <script>
-      window.VEX_FIREBASE_CONFIG = {{ firebase_json | safe }};
-      window.VEX_SUPABASE_CONFIG = {{ supabase_json | safe }};
-      window.VEX_SITE_URL = {{ configured_site_url | tojson }};
+      window.VEX_FIREBASE_CONFIG = __VEX_FIREBASE_CONFIG__;
+      window.VEX_SUPABASE_CONFIG = __VEX_SUPABASE_CONFIG__;
+      window.VEX_SITE_URL = __VEX_SITE_URL__;
     </script>
   </head>
   <body>
@@ -61,6 +43,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="/static/app.js"></script>
   </body>
 </html>

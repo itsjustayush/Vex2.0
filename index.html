@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0e0e10" />
+    <link id="vex-favicon" rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <meta name="author" content="Ayush Bhattacharya" />
+    <meta name="creator" content="Ayush Bhattacharya" />
+    <meta name="description" content="Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="keywords" content="writing workspace, Markdown notes, LaTeX editor, moodboard app, distraction-free writing, creative thinking" />
+    <link rel="canonical" href="https://vexnote.vercel.app/" />
+    <link rel="me" href="https://github.com/itsjustayush" />
+    <title>Vex - Networked Thought &amp; AI Workspace</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vex" />
+    <meta property="og:title" content="Vex - Networked Thought &amp; AI Workspace" />
+    <meta property="og:description" content="Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
+    <meta property="og:url" content="https://vexnote.vercel.app/" />
+    <meta property="og:image" content="/static/social-preview.svg" />
+    <meta property="og:image:alt" content="Vex writing workspace with a calm dark interface" />
+    <meta property="og:image:type" content="image/svg+xml" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vex - Networked Thought &amp; AI Workspace" />
+    <meta name="twitter:description" content="Vex is a calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards." />
+    <meta name="twitter:image" content="/static/social-preview.svg" />
+    <meta name="twitter:image:alt" content="Vex writing workspace with a calm dark interface" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="preload" href="/static/sound.ogg" as="audio" type="audio/ogg" />
+
+    <!-- Structured Data: Organization, WebSite, Article, FAQPage, BreadcrumbList, Speakable, HowTo -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://vexnote.vercel.app/#organization",
+          "name": "Vex",
+          "url": "https://vexnote.vercel.app/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://vexnote.vercel.app/static/favicon.svg",
+            "width": 512,
+            "height": 512
+          },
+          "founder": {
+            "@type": "Person",
+            "name": "Ayush Bhattacharya",
+            "url": "https://github.com/itsjustayush",
+            "email": "info.cometlabs@gmail.com"
+          },
+          "sameAs": [
+            "https://github.com/itsjustayush/Vex2.0",
+            "https://github.com/itsjustayush"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://vexnote.vercel.app/#website",
+          "url": "https://vexnote.vercel.app/",
+          "name": "Vex",
+          "description": "A calm, colorful writing workspace for Markdown notes, LaTeX, tactile typing, and endless moodboards.",
+          "publisher": { "@id": "https://vexnote.vercel.app/#organization" }
+        },
+        {
+          "@type": "Article",
+          "@id": "https://vexnote.vercel.app/#article",
+          "headline": "Make room for good thoughts — Vex Writing Workspace",
+          "description": "Vex is a calm, colorful workspace for thoughts that refuse to sit still. Write in full flow, pin visual fragments, and let connections appear.",
+          "author": {
+            "@type": "Person",
+            "name": "Ayush Bhattacharya",
+            "url": "https://github.com/itsjustayush"
+          },
+          "publisher": { "@id": "https://vexnote.vercel.app/#organization" },
+          "datePublished": "2026-01-01T00:00:00Z",
+          "dateModified": "2026-09-04T00:00:00Z",
+          "mainEntityOfPage": "https://vexnote.vercel.app/",
+          "speakable": {
+            "@type": "SpeakableSpecification",
+            "cssSelector": [".landing-hero h1", ".landing-subtitle", ".aeo-faq-answer"]
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://vexnote.vercel.app/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is Vex?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Vex is a calm, distraction-free creative workspace created by Ayush Bhattacharya. It unifies Markdown note taking, LaTeX equation formatting, mechanical typing sound feedback, and infinite visual moodboards into a cohesive digital sanctuary."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does the tactile keyboard sound simulation work?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Keystrokes trigger calibrated mechanical switch sound sprites through the browser Web Audio API, synthesizing the tactile acoustic resonance of physical typewriter keys. Sound volume can be dynamically adjusted or muted via the topbar audio toggle."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How do endless moodboards organize visual concepts?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The infinite 2D canvas lets creators drag images, videos, and color-coded sticky notes into freeform clusters. Users can zoom from 25% to 200% and pan freely to discover organic associations between disparate thoughts."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does Markdown and LaTeX formatting work in Vex?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Vex supports standard Markdown syntax for headings, blockquotes, bullet lists, bold, italics, and inline code. Mathematical formulas enclosed in dollar signs (such as $E = mc^2$) render instantly with crisp typographic formatting."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does cross-device cloud synchronization maintain privacy?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "You can write immediately in guest mode without creating an account; your work remains strictly in local client memory. When you sign in via Google or email verification, documents sync securely to Google Cloud Firestore with automatic version history."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What display themes and paper textures are available?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Vex features three curated themes: Dark, Light, and Zen. The writing canvas can also be styled with five paper styles: ruled single, ruled double, plain, dotted light, and dotted dense to suit every writing state of mind."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "BreadcrumbList",
+          "@id": "https://vexnote.vercel.app/#breadcrumbs",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://vexnote.vercel.app/"
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "Documentation",
+              "item": "https://vexnote.vercel.app/docs"
+            },
+            {
+              "@type": "ListItem",
+              "position": 3,
+              "name": "System Status",
+              "item": "https://vexnote.vercel.app/status"
+            }
+          ]
+        },
+        {
+          "@type": "HowTo",
+          "@id": "https://vexnote.vercel.app/#howto",
+          "name": "How to organize thoughts and notes in Vex",
+          "description": "A quick guide on drafting structured notes, organizing spatial moodboards, and enabling tactile typing in Vex.",
+          "step": [
+            {
+              "@type": "HowToStep",
+              "name": "Launch the workspace",
+              "text": "Open the Vex workspace in your browser. Choose your preferred paper texture: ruled, plain, or dotted."
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Draft notes in Markdown and LaTeX",
+              "text": "Type standard Markdown shortcuts for headings and quotes, or embed LaTeX formulas between dollar signs."
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Pin visual references on the endless moodboard",
+              "text": "Switch to the Moodboard view to drop in reference images, videos, and colored notes across an infinite 2D canvas."
+            },
+            {
+              "@type": "HowToStep",
+              "name": "Sync across devices",
+              "text": "Sign in via Google or email OTP to automatically save notes to Google Cloud Firestore."
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <script>
+      window.VEX_FIREBASE_CONFIG = __VEX_FIREBASE_CONFIG__;
+      window.VEX_SUPABASE_CONFIG = __VEX_SUPABASE_CONFIG__;
+      window.VEX_SITE_URL = __VEX_SITE_URL__;
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Semantic Static Shell for Search Engines, Answer Engines, and Fast Initial Render -->
+      <div class="landing">
+        <div class="landing-shell">
+          <header class="topbar">
+            <div class="top-left">
+              <a class="brand" href="/" aria-label="Vex Home">
+                <span class="brand-mark" aria-hidden="true">✦</span>
+                <span class="brand-title">Vex</span>
+              </a>
+            </div>
+            <nav class="top-actions" aria-label="Header navigation">
+              <a class="ghost-btn" href="/docs">Docs</a>
+              <a class="ghost-btn" href="/status">Status</a>
+              <a class="primary-btn" href="/dashboard">Open App</a>
+            </nav>
+          </header>
+          <main>
+            <section class="landing-hero">
+              <span class="eyebrow"><b>✦</b> writing, notes &amp; moodboards</span>
+              <h1>Make room for <em>good</em> thoughts.</h1>
+              <p class="landing-subtitle">A calm, colorful workspace for the thoughts that refuse to sit still. Write in full flow, pin the fragments, and let the connections appear.</p>
+              <div class="landing-cta">
+                <a class="primary-btn" href="/dashboard">Start writing ↗</a>
+                <a class="ghost-btn" href="/docs">Read documentation ↓</a>
+              </div>
+            </section>
+
+            <section class="landing-bento">
+              <article class="feature-card">
+                <div class="feature-icon">✺</div>
+                <h3>Thoughts, not folders.</h3>
+                <p>Start with a blank page, choose a texture, and make your own little corner of the internet.</p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-icon">⌘</div>
+                <h3>Markdown native.</h3>
+                <p>Formatting, LaTeX, shortcuts, and a gentle keyboard that makes writing feel tactile.</p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-icon">◌</div>
+                <h3>Endless moodboards.</h3>
+                <p>Drop in images, videos, notes, and references without fighting the canvas.</p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-icon">≈</div>
+                <h3>Three moods.</h3>
+                <p>Light, dark, and zen. The room changes when you do.</p>
+              </article>
+              <article class="feature-card">
+                <div class="feature-icon">↗</div>
+                <h3>Write freely.</h3>
+                <p>Explore as a guest in memory, then sign in when you are ready to save and sync your space.</p>
+              </article>
+            </section>
+
+            <section class="landing-aeo-section">
+              <div class="landing-section-head">
+                <span class="eyebrow"><b>✦</b> architecture &amp; capabilities</span>
+                <h2>How does Vex elevate personal writing and creative thought?</h2>
+                <p>Vex is designed for thinkers, writers, and builders who need both the precision of structured Markdown notes and the spatial freedom of infinite moodboards.</p>
+              </div>
+
+              <div class="faq-grid">
+                <article class="faq-card">
+                  <h3>How does the tactile keyboard sound simulation work?</h3>
+                  <p class="aeo-faq-answer">Keystrokes trigger calibrated mechanical sound sprites through the browser Web Audio API, synthesizing the tactile acoustic resonance of physical typewriter switches. The sound can be dynamically adjusted or muted via the audio control toggle.</p>
+                </article>
+                <article class="faq-card">
+                  <h3>How do endless moodboards organize visual concepts?</h3>
+                  <p class="aeo-faq-answer">The infinite 2D canvas lets creators drag images, videos, and color-coded sticky notes into freeform clusters. Users can zoom from 25% to 200% and pan smoothly to discover organic associations between fragments of thought.</p>
+                </article>
+                <article class="faq-card">
+                  <h3>How does Markdown and LaTeX formatting work in Vex?</h3>
+                  <p class="aeo-faq-answer">Vex supports standard Markdown syntax for headings, blockquotes, bullet lists, bold, italics, and inline code. Mathematical expressions enclosed in dollar signs (such as $E = mc^2$) render instantly with crisp typographic formatting.</p>
+                </article>
+                <article class="faq-card">
+                  <h3>How does cross-device cloud synchronization maintain privacy?</h3>
+                  <p class="aeo-faq-answer">You can write immediately in guest mode without creating an account; your work remains strictly in local client memory. When you sign in via Google or email verification, documents sync securely to Google Cloud Firestore with automatic version history.</p>
+                </article>
+                <article class="faq-card">
+                  <h3>What display themes and paper textures are available?</h3>
+                  <p class="aeo-faq-answer">Vex features three curated themes: Dark, Light, and Zen. The writing canvas can also be styled with five paper styles: ruled single, ruled double, plain, dotted light, and dotted dense to suit every writing state of mind.</p>
+                </article>
+                <article class="faq-card">
+                  <h3>How does the built-in typing practice mode work?</h3>
+                  <p class="aeo-faq-answer">Enhance Typing tracks your real-time words-per-minute speed, accuracy, and typing cadence over curated literary excerpts, developing keyboard fluency and tactile muscle memory.</p>
+                </article>
+              </div>
+
+              <div class="specs-table-wrap">
+                <table class="specs-table" aria-label="Vex Workspace Specifications">
+                  <thead>
+                    <tr>
+                      <th>Core Feature</th>
+                      <th>Supported Capabilities &amp; Formats</th>
+                      <th>Execution Architecture</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Markdown &amp; LaTeX</strong></td>
+                      <td>Headings (#), Quotes (&gt;), Lists (-), Math ($...$)</td>
+                      <td>Client-side reactive parser</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Tactile Typing</strong></td>
+                      <td>Mechanical switch sound sprites, mute toggle</td>
+                      <td>Web Audio API synthesize engine</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Infinite Moodboard</strong></td>
+                      <td>Sticky notes, media drop, pan &amp; zoom (25%-200%)</td>
+                      <td>Spatial 2D coordinate canvas</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Cloud Sync</strong></td>
+                      <td>Google Cloud Firestore, multi-device, version history</td>
+                      <td>Encrypted batch cloud sync</td>
+                    </tr>
+                    <tr>
+                      <td><strong>AI Intelligence</strong></td>
+                      <td>Gemini 3.8 Flash note assistance &amp; summarization</td>
+                      <td>Server-side API proxy</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <nav class="internal-nav-strip" aria-label="Explore Vex Documentation and System Status">
+                <a href="/docs">✦ Documentation &amp; User Guide</a>
+                <a href="/status">● System Status &amp; Health</a>
+                <a href="/dashboard">↗ Open Workspace</a>
+                <a href="/llms.txt">🗎 llms.txt Manifest</a>
+              </nav>
+            </section>
+          </main>
+
+          <footer class="landing-footer">
+            <span>© 2026 Vex. Think in full color.</span>
+            <div class="landing-footer-links">
+              <a href="/docs">Docs</a>
+              <a href="/status">Status</a>
+              <a href="/llms.txt">llms.txt</a>
+              <a href="https://github.com/itsjustayush/Vex2.0" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+            <span class="creator-credit">Created by <a href="https://github.com/itsjustayush" target="_blank" rel="noreferrer">Ayush Bhattacharya</a> · <a href="mailto:info.cometlabs@gmail.com">info.cometlabs@gmail.com</a></span>
+            <span class="inspiration-credit">Inspired by <a href="https://keythm.aayushbharti.in/" target="_blank" rel="noreferrer">keythm.aayushbharti.in</a></span>
+            <a class="github-badge" href="https://github.com/itsjustayush/Vex2.0" target="_blank" rel="noreferrer" aria-label="View Vex on GitHub"><span aria-hidden="true">◉</span> Vex on GitHub ↗</a>
+          </footer>
+        </div>
+      </div>
+    </div>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

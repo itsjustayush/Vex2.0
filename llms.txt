@@ -1,0 +1,34 @@
+# Vex — Networked Thought & AI Workspace
+
+> Vex is a calm, colorful, distraction-free writing workspace combining Markdown notes, LaTeX equations, tactile keyboard sound simulation, and infinite visual moodboards.
+
+## Core Navigation & Key Pages
+- [Vex Workspace](https://vexnote.vercel.app/): Interactive distraction-free writing environment with ruled/dotted paper styles, tactile mechanical typing audio, and live preview.
+- [Documentation & User Guide](https://vexnote.vercel.app/docs): Comprehensive guide to Markdown formatting, LaTeX syntax, keyboard shortcuts, and tactile audio engine configuration.
+- [System Status](https://vexnote.vercel.app/status): Real-time operational status of Vex services, Firestore cloud database sync, and Gemini AI endpoints.
+- [Developer API Keys](https://vexnote.vercel.app/settings): API key management and REST integration for notes, projects, and versioning.
+
+## Key Capabilities & Features
+- **Tactile Typing Audio Synthesizer**: Custom Web Audio API mechanical sound simulation with low-latency sprite playback for focused writing cadence and flow.
+- **Distraction-Free Markdown & LaTeX Editor**: Live formatting of headings, bold/italics, quotes, code blocks, and math equations ($E = mc^2$).
+- **Infinite 2D Moodboards**: Freeform spatial canvas supporting dragged media, colored notes, customizable typography, and seamless pan/zoom exploration.
+- **Privacy-Centric Multi-Device Sync**: Guest mode operates purely in client memory; authenticated sessions sync encrypted documents to Google Cloud Firestore with version history.
+- **Gemini AI Intelligence**: Integrated assistant powered by Google Gemini 3.8 Flash for summarizing notes, structuring thoughts, and answering creative queries.
+- **Touch & Mobile Optimized**: Responsive virtual mechanical keyboard dock and tactile controls tailored for smartphones, tablets, and desktop displays.
+
+## Frequently Asked Questions (FAQ)
+
+### What is Vex?
+Vex is an aesthetic writing and creative thinking workspace created by Ayush Bhattacharya. It is designed to bridge structured Markdown notes with open-ended visual moodboards.
+
+### How does the tactile typing audio engine work?
+Keystrokes trigger calibrated audio sprites through the browser's Web Audio API, recreating the authentic acoustic resonance of mechanical typewriter switches.
+
+### How do infinite moodboards work in Vex?
+The moodboard offers an infinite 2D canvas where creators can place sticky notes, pin images, zoom from 25% to 200%, and pan freely to arrange visual associations.
+
+### How does data privacy and cloud saving work?
+Visitors can write freely without an account; guest data never leaves local memory. Signing in connects to Google Cloud Firestore, enabling multi-device synchronization and automatic version history.
+
+### What formatting syntax does Vex support?
+Vex supports GitHub-flavored Markdown (headings, bold, italics, blockquotes, lists, inline code) as well as inline LaTeX math equations.
