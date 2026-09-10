@@ -16,13 +16,28 @@
     theme: "dark",
     pageType: "ruled-single",
     pageId: "daily-notes",
-    viewMode: "edit",
+    viewMode: "split",
     muted: false,
     keyboardVisible: true,
     title: "A softer place to think",
-    content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful.\n\n**Try typing** with the keyboard below, or switch to a moodboard when words need a little more space.\n\n`Inline code` · $E = mc^2$",
+    content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful. Read more in [[Networked Thinking]] or track our [[Project Roadmap]].\n\nHere is a foundational paragraph about creative momentum ^spark-concept\n\n## Live Diagramming\n\n```mermaid\nflowchart TD\n  Sparks([Sparks of Intuition]) --> Canvas[Spatial Moodboard]\n  Canvas --> Synthesis[Daily Notes]\n  Synthesis --> Database{Structured Data}\n  Database -->|Table & Board| Ship([Publish ✦])\n```\n\n## Structured Project Database\n\n```csv\nFeature, Status, Priority, Estimate, Owner\nSpatial Moodboard, Done, High, 4h, Design\nLive Diagrams (Mermaid & TikZ), In Progress, Critical, 3h, Visual\nNotion-style Database, In Progress, Critical, 2h, Frontend\nWikilinks & Block Refs, Done, High, 2h, Graph\nTactile Synthesizer, Done, Medium, 3h, Audio\n```\n\nReference our central block using [[Networked Thinking#^spark-concept]].",
     typingStats: { completed: 0, bestWpm: 0, bestAccuracy: 0, lastWpm: 0, lastAccuracy: 0, streak: 0 },
-    pages: [{ id:"daily-notes", title:"A softer place to think", content:"# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful.\n\n**Try typing** with the keyboard below, or switch to a moodboard when words need a little more space.\n\n`Inline code` · $E = mc^2$", page_type:"ruled-single", updated_at:"" }],
+    pages: [
+      {
+        id: "daily-notes",
+        title: "A softer place to think",
+        content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful. Read more in [[Networked Thinking]] or track our [[Project Roadmap]].\n\nHere is a foundational paragraph about creative momentum ^spark-concept\n\n## Live Diagramming\n\n```mermaid\nflowchart TD\n  Sparks([Sparks of Intuition]) --> Canvas[Spatial Moodboard]\n  Canvas --> Synthesis[Daily Notes]\n  Synthesis --> Database{Structured Data}\n  Database -->|Table & Board| Ship([Publish ✦])\n```\n\n## Structured Project Database\n\n```csv\nFeature, Status, Priority, Estimate, Owner\nSpatial Moodboard, Done, High, 4h, Design\nLive Diagrams (Mermaid & TikZ), In Progress, Critical, 3h, Visual\nNotion-style Database, In Progress, Critical, 2h, Frontend\nWikilinks & Block Refs, Done, High, 2h, Graph\nTactile Synthesizer, Done, Medium, 3h, Audio\n```\n\nReference our central block using [[Networked Thinking#^spark-concept]].",
+        page_type: "ruled-single",
+        updated_at: ""
+      },
+      {
+        id: "networked-thinking",
+        title: "Networked Thinking",
+        content: "# Networked Thinking\n\nKnowledge is a web, not a filing cabinet. By referencing [[A softer place to think]], notes connect seamlessly.\n\nHere we cite the core concept: [[A softer place to think#^spark-concept]].\n\n```tikz\n\\node[draw, circle] (N1) at (0, 0) {Spark};\n\\node[draw, rectangle] (N2) at (3, 1) {Synthesis};\n\\node[draw, rectangle] (N3) at (3, -1) {Database};\n\\node[draw, circle] (N4) at (6, 0) {Output};\n\\draw[->] (N1) -- (N2);\n\\draw[->] (N1) -- (N3);\n\\draw[->] (N2) -- (N4);\n\\draw[->] (N3) -- (N4);\n```\n\nCheck back with [[A softer place to think]] anytime.",
+        page_type: "dotted-light",
+        updated_at: ""
+      }
+    ],
     boards: [{ id:"moodboard", title:"Moodboard", item_count:3, updated_at:"" }],
     activeBoardId: "moodboard",
     mood: [
@@ -41,6 +56,8 @@
   let toastTimer = null;
   const dirtyScopes = new Set(["page", "board", "settings", "typing"]);
   const dirtyVersions = { page:0, board:0, settings:0, typing:0 };
+  const deletedPageIds = new Set();
+  const deletedBoardIds = new Set();
   let saveInFlight = false;
   let saveQueued = false;
   let savePromise = null;
@@ -248,6 +265,8 @@
   async function stateSyncPayload(scopes = new Set(["page", "board", "settings", "typing"])) {
     ensureWorkspaceHistory();
     const payload = {};
+    if (deletedPageIds.size) payload.deleted_page_ids = Array.from(deletedPageIds);
+    if (deletedBoardIds.size) payload.deleted_board_ids = Array.from(deletedBoardIds);
     if (scopes.has("page")) {
       rememberCurrentPage();
       payload.pages = state.pages.slice(0, 100).map(supabasePageRow);
@@ -440,6 +459,10 @@
       hydrationRequestId += 1;
       if (authReady()) await firebase.auth().signOut();
       firebaseUser = null; userHydrated=false; hydratedUserId=""; hydratingUserId=""; dirtyScopes.clear(); selectedMoodId="";
+      deletedPageIds.clear();
+      deletedBoardIds.clear();
+      state = loadState();
+      syncStatus = "guest · not saved";
       renderAll(); showToast("Signed out");
     } catch (error) { showToast(authErrorMessage(error)); }
   }
@@ -555,6 +578,667 @@
     }
   }
 
+  let diagramUidCounter = 0;
+  let dbUidCounter = 0;
+  let wikilinkTooltipEl = null;
+
+  function parseCsvText(csv) {
+    const lines = (csv || "").trim().split("\n").map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return { headers: [], rows: [] };
+    const parseLine = line => {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+    const headers = parseLine(lines[0]);
+    const rows = lines.slice(1).map(parseLine);
+    return { headers, rows };
+  }
+
+  function serializeCsv(headers, rows) {
+    const escapeField = val => {
+      const str = String(val ?? "");
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    const headerLine = headers.map(escapeField).join(", ");
+    const rowLines = rows.map(r => headers.map((_, i) => escapeField(r[i] || "")).join(", "));
+    return [headerLine, ...rowLines].join("\n");
+  }
+
+  function detectColumnTypes(headers, rows) {
+    return headers.map((header, colIdx) => {
+      const h = header.toLowerCase();
+      const vals = rows.map(r => (r[colIdx] || "").trim());
+      if (h.includes("status") || h.includes("state") || h.includes("stage") || vals.some(v => /^(todo|in progress|done|doing|backlog|review|blocked|planned)$/i.test(v))) return "status";
+      if (h.includes("priority") || vals.some(v => /^(critical|high|medium|low|urgent|p0|p1|p2)$/i.test(v))) return "priority";
+      if (h.includes("date") || h.includes("due") || vals.some(v => /^\d{4}-\d{2}-\d{2}$/i.test(v))) return "date";
+      if (vals.length && vals.every(v => !v || /^[+-]?\$?\d+(?:\.\d+)?(?:h|m|%|k|M)?$/i.test(v))) return "number";
+      if (h.includes("tag") || vals.some(v => v.includes(";"))) return "tags";
+      return "text";
+    });
+  }
+
+  function getStatusPillClass(statusName) {
+    const s = String(statusName || "").toLowerCase().replace(/[\s_-]+/g, "-");
+    if (s.includes("done") || s.includes("complete")) return "status-done";
+    if (s.includes("progress") || s.includes("doing") || s.includes("active")) return "status-in-progress";
+    if (s.includes("review")) return "status-review";
+    if (s.includes("blocked") || s.includes("hold")) return "status-blocked";
+    return "status-todo";
+  }
+
+  function getPriorityBadgeClass(prio) {
+    const p = String(prio || "").toLowerCase();
+    if (p.includes("crit") || p.includes("urg") || p === "p0") return "priority-critical";
+    if (p.includes("high") || p === "p1") return "priority-high";
+    if (p.includes("med") || p === "p2") return "priority-medium";
+    return "priority-low";
+  }
+
+  function generateFlowchartSvg(code) {
+    const lines = (code || "").trim().split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("%%"));
+    let isLR = false;
+    const first = lines[0] ? lines[0].toLowerCase() : "";
+    if (first.includes("lr") || first.includes("rl")) isLR = true;
+
+    const nodes = new Map();
+    const edges = [];
+
+    const getNode = (id, label = "", shape = "rect") => {
+      const cleanId = id.trim();
+      if (!nodes.has(cleanId)) {
+        nodes.set(cleanId, { id: cleanId, label: label || cleanId, shape });
+      } else if (label) {
+        const existing = nodes.get(cleanId);
+        existing.label = label;
+        existing.shape = shape;
+      }
+      return cleanId;
+    };
+
+    lines.forEach(line => {
+      if (/^(graph|flowchart)\b/i.test(line)) return;
+      const edgeRegex = /([a-zA-Z0-9_-]+)(?:\s*(?:(\[\(|\[|\(|\{\{|\(\(|\{)([\s\S]*?)(\]\)|\)|\]|\}\}|\)\)|\})))?\s*(-->|---|-.->|==>)\s*(?:\|([^|]+)\|)?\s*([a-zA-Z0-9_-]+)(?:\s*(?:(\[\(|\[|\(|\{\{|\(\(|\{)([\s\S]*?)(\]\)|\)|\]|\}\}|\)\)|\})))?/g;
+      let edgeMatch;
+      let matchedAnyEdge = false;
+      while ((edgeMatch = edgeRegex.exec(line)) !== null) {
+        matchedAnyEdge = true;
+        const fromId = edgeMatch[1];
+        const fromOpen = edgeMatch[2];
+        const fromLabel = edgeMatch[3];
+        const edgeType = edgeMatch[5];
+        const edgeLabel = edgeMatch[6] || "";
+        const toId = edgeMatch[7];
+        const toOpen = edgeMatch[8];
+        const toLabel = edgeMatch[9];
+
+        const shapeFrom = fromOpen === "([" ? "capsule" : fromOpen === "((" ? "circle" : fromOpen === "{" ? "decision" : fromOpen === "(" ? "round" : "rect";
+        const shapeTo = toOpen === "([" ? "capsule" : toOpen === "((" ? "circle" : toOpen === "{" ? "decision" : toOpen === "(" ? "round" : "rect";
+
+        getNode(fromId, fromLabel, shapeFrom);
+        getNode(toId, toLabel, shapeTo);
+        edges.push({ from: fromId, to: toId, label: edgeLabel.trim(), type: edgeType });
+      }
+
+      if (!matchedAnyEdge) {
+        const nodeMatch = line.match(/([a-zA-Z0-9_-]+)\s*(\[\(|\[|\(|\{\{|\(\(|\{)([\s\S]*?)(\]\)|\)|\]|\}\}|\)\)|\})/);
+        if (nodeMatch) {
+          const id = nodeMatch[1];
+          const open = nodeMatch[2];
+          const label = nodeMatch[3];
+          const shape = open === "([" ? "capsule" : open === "((" ? "circle" : open === "{" ? "decision" : open === "(" ? "round" : "rect";
+          getNode(id, label, shape);
+        }
+      }
+    });
+
+    if (!nodes.size) {
+      getNode("Start", "Sparks of Thought", "capsule");
+      getNode("Process", "Develop in Vex", "rect");
+      getNode("Output", "Publish ✦", "capsule");
+      edges.push({ from: "Start", to: "Process", label: "" });
+      edges.push({ from: "Process", to: "Output", label: "Ready" });
+    }
+
+    const nodeArray = Array.from(nodes.values());
+    const ranks = new Map();
+    const inDegree = new Map();
+    nodeArray.forEach(n => inDegree.set(n.id, 0));
+    edges.forEach(e => inDegree.set(e.to, (inDegree.get(e.to) || 0) + 1));
+
+    const queue = nodeArray.filter(n => (inDegree.get(n.id) || 0) === 0).map(n => n.id);
+    if (!queue.length && nodeArray.length) queue.push(nodeArray[0].id);
+
+    queue.forEach(id => ranks.set(id, 0));
+    let visitedCount = 0;
+    while (queue.length && visitedCount < nodeArray.length * 3) {
+      visitedCount++;
+      const cur = queue.shift();
+      const curRank = ranks.get(cur) || 0;
+      edges.filter(e => e.from === cur).forEach(e => {
+        const nextRank = Math.max(ranks.get(e.to) || 0, curRank + 1);
+        ranks.set(e.to, nextRank);
+        if (!queue.includes(e.to)) queue.push(e.to);
+      });
+    }
+
+    nodeArray.forEach((n, idx) => {
+      if (!ranks.has(n.id)) ranks.set(n.id, idx);
+    });
+
+    const rankGroups = new Map();
+    nodeArray.forEach(n => {
+      const r = ranks.get(n.id) || 0;
+      if (!rankGroups.has(r)) rankGroups.set(r, []);
+      rankGroups.get(r).push(n);
+    });
+
+    const positions = new Map();
+    const sortedRanks = Array.from(rankGroups.keys()).sort((a, b) => a - b);
+
+    let maxW = 520;
+    let maxH = 260;
+
+    if (isLR) {
+      const colWidth = 195;
+      const rowHeight = 85;
+      sortedRanks.forEach((r, rankIdx) => {
+        const group = rankGroups.get(r);
+        group.forEach((node, nodeIdx) => {
+          const x = 50 + rankIdx * colWidth;
+          const y = 40 + nodeIdx * rowHeight;
+          positions.set(node.id, { x, y, width: 140, height: 42 });
+        });
+      });
+      maxW = Math.max(520, sortedRanks.length * colWidth + 80);
+      const maxRows = Math.max(...Array.from(rankGroups.values()).map(g => g.length));
+      maxH = Math.max(220, maxRows * rowHeight + 80);
+    } else {
+      const rowHeight = 100;
+      const colWidth = 180;
+      sortedRanks.forEach((r, rankIdx) => {
+        const group = rankGroups.get(r);
+        group.forEach((node, nodeIdx) => {
+          const x = 50 + nodeIdx * colWidth;
+          const y = 40 + rankIdx * rowHeight;
+          positions.set(node.id, { x, y, width: 140, height: 42 });
+        });
+      });
+      const maxCols = Math.max(...Array.from(rankGroups.values()).map(g => g.length));
+      maxW = Math.max(520, maxCols * colWidth + 80);
+      maxH = Math.max(240, sortedRanks.length * rowHeight + 70);
+    }
+
+    const edgePaths = edges.map(e => {
+      const p1 = positions.get(e.from);
+      const p2 = positions.get(e.to);
+      if (!p1 || !p2) return "";
+      let x1, y1, x2, y2;
+      if (isLR) {
+        x1 = p1.x + p1.width;
+        y1 = p1.y + p1.height / 2;
+        x2 = p2.x;
+        y2 = p2.y + p2.height / 2;
+      } else {
+        x1 = p1.x + p1.width / 2;
+        y1 = p1.y + p1.height;
+        x2 = p2.x + p2.width / 2;
+        y2 = p2.y;
+      }
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const pathD = isLR ? `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}` : `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
+      const labelMarkup = e.label ? `
+        <rect x="${mx - 24}" y="${my - 9}" width="48" height="18" rx="4" fill="var(--panel-solid)" stroke="var(--line)" />
+        <text x="${mx}" y="${my + 3}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="Space Grotesk, sans-serif">${escapeHtml(e.label)}</text>
+      ` : "";
+      return `
+        <g class="vex-flowchart-edge">
+          <path d="${pathD}" stroke="var(--ink)" stroke-width="1.8" fill="none" marker-end="url(#vex-flowchart-arrow)" stroke-dasharray="${e.type.includes(".") ? "4,4" : "none"}" />
+          ${labelMarkup}
+        </g>
+      `;
+    }).join("");
+
+    const nodeSvgs = nodeArray.map(node => {
+      const pos = positions.get(node.id) || { x: 50, y: 50, width: 140, height: 42 };
+      const rx = node.shape === "capsule" ? 21 : node.shape === "round" ? 8 : node.shape === "decision" ? 0 : 6;
+      let shapeEl = "";
+      if (node.shape === "decision") {
+        const cx = pos.x + pos.width / 2;
+        const cy = pos.y + pos.height / 2;
+        const hw = pos.width / 2;
+        const hh = pos.height / 2;
+        shapeEl = `<polygon points="${cx},${cy - hh} ${cx + hw},${cy} ${cx},${cy + hh} ${cx - hw},${cy}" fill="var(--panel-solid)" stroke="var(--accent)" stroke-width="1.8" />`;
+      } else {
+        shapeEl = `<rect x="${pos.x}" y="${pos.y}" width="${pos.width}" height="${pos.height}" rx="${rx}" fill="var(--panel-solid)" stroke="var(--line-strong)" stroke-width="1.6" />`;
+      }
+      return `
+        <g class="vex-flowchart-node">
+          ${shapeEl}
+          <text x="${pos.x + pos.width / 2}" y="${pos.y + pos.height / 2 + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)" font-family="Space Grotesk, sans-serif">${escapeHtml(node.label)}</text>
+        </g>
+      `;
+    }).join("");
+
+    return `
+      <svg viewBox="0 0 ${maxW} ${maxH}" style="width:100%;max-width:${maxW}px;height:auto;display:block;">
+        <defs>
+          <marker id="vex-flowchart-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="var(--ink)" />
+          </marker>
+        </defs>
+        ${edgePaths}
+        ${nodeSvgs}
+      </svg>
+    `;
+  }
+
+  function generateTikzSvg(code) {
+    const lines = (code || "").trim().split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("%"));
+    const nodes = [];
+    const draws = [];
+
+    lines.forEach(line => {
+      const nodeMatch = line.match(/\\node(?:\[([^\]]*)\])?\s*\(([^)]+)\)\s*(?:at\s*\(([^,]+),\s*([^)]+)\))?\s*\{([^}]*)\};?/);
+      if (nodeMatch) {
+        const style = nodeMatch[1] || "";
+        const id = nodeMatch[2].trim();
+        const xVal = parseFloat(nodeMatch[3] || "0");
+        const yVal = parseFloat(nodeMatch[4] || "0");
+        const label = nodeMatch[5] || id;
+        nodes.push({ id, label, x: xVal, y: yVal, circle: style.includes("circle") });
+      }
+      const drawMatch = line.match(/\\draw(?:\[([^\]]*)\])?\s*\(([^)]+)\)\s*(?:--|to)\s*\(([^)]+)\);?/);
+      if (drawMatch) {
+        draws.push({ from: drawMatch[2].trim(), to: drawMatch[3].trim(), arrow: (drawMatch[1] || "").includes(">") });
+      }
+    });
+
+    if (!nodes.length) {
+      nodes.push({ id: "A", label: "Idea", x: 0, y: 0, circle: true });
+      nodes.push({ id: "B", label: "Draft", x: 3, y: 0, circle: false });
+      nodes.push({ id: "C", label: "Publish", x: 6, y: 0, circle: true });
+      draws.push({ from: "A", to: "B", arrow: true });
+      draws.push({ from: "B", to: "C", arrow: true });
+    }
+
+    const minX = Math.min(...nodes.map(n => n.x));
+    const maxX = Math.max(...nodes.map(n => n.x));
+    const minY = Math.min(...nodes.map(n => n.y));
+    const maxY = Math.max(...nodes.map(n => n.y));
+
+    const spanX = Math.max(maxX - minX, 1);
+    const spanY = Math.max(maxY - minY, 1);
+
+    const svgW = 540;
+    const svgH = 220;
+    const margin = 60;
+
+    const scaleX = (x) => margin + ((x - minX) / spanX) * (svgW - margin * 2);
+    const scaleY = (y) => svgH - (margin + ((y - minY) / spanY) * (svgH - margin * 2));
+
+    const nodePositions = new Map();
+    nodes.forEach(n => {
+      nodePositions.set(n.id, { x: scaleX(n.x), y: scaleY(n.y) });
+    });
+
+    const drawPaths = draws.map(d => {
+      const p1 = nodePositions.get(d.from);
+      const p2 = nodePositions.get(d.to);
+      if (!p1 || !p2) return "";
+      return `
+        <line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="var(--ink)" stroke-width="1.8" marker-end="url(#vex-flowchart-arrow)" />
+      `;
+    }).join("");
+
+    const nodeMarkup = nodes.map(n => {
+      const p = nodePositions.get(n.id);
+      if (n.circle) {
+        return `
+          <g>
+            <circle cx="${p.x}" cy="${p.y}" r="26" fill="var(--panel-solid)" stroke="var(--accent)" stroke-width="2" />
+            <text x="${p.x}" y="${p.y + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)" font-family="Space Grotesk, sans-serif">${escapeHtml(n.label)}</text>
+          </g>
+        `;
+      }
+      return `
+        <g>
+          <rect x="${p.x - 45}" y="${p.y - 18}" width="90" height="36" rx="8" fill="var(--panel-solid)" stroke="var(--line-strong)" stroke-width="1.8" />
+          <text x="${p.x}" y="${p.y + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)" font-family="Space Grotesk, sans-serif">${escapeHtml(n.label)}</text>
+        </g>
+      `;
+    }).join("");
+
+    return `
+      <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:${svgW}px;height:auto;display:block;">
+        <defs>
+          <marker id="vex-flowchart-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="var(--ink)" />
+          </marker>
+        </defs>
+        ${drawPaths}
+        ${nodeMarkup}
+      </svg>
+    `;
+  }
+
+  function renderDiagramBlock(code, rawLang) {
+    const lang = (rawLang || "mermaid").toLowerCase();
+    const diagramId = `diag-${++diagramUidCounter}`;
+    const escapedCode = escapeHtml(code);
+    const isTikz = lang === "tikz";
+    const title = isTikz ? "TikZ Diagram" : "Flowchart Diagram";
+    const svgContent = isTikz ? generateTikzSvg(code) : generateFlowchartSvg(code);
+
+    return `
+      <div class="vex-diagram-card" data-diagram-id="${diagramId}" data-diagram-lang="${lang}">
+        <div class="vex-diagram-toolbar">
+          <div class="vex-diagram-title">
+            <span class="vex-diagram-badge">${isTikz ? "TikZ" : "Mermaid"}</span>
+            <span class="vex-diagram-hint">${title}</span>
+          </div>
+          <div class="vex-diagram-actions">
+            <button class="vex-diagram-action-btn" data-diagram-action="toggle-code" type="button" title="Toggle code">{ } Source</button>
+            <button class="vex-diagram-action-btn" data-diagram-action="copy-code" type="button" title="Copy code">Copy</button>
+            <button class="vex-diagram-action-btn" data-diagram-action="zoom-out" type="button" title="Zoom out">－</button>
+            <button class="vex-diagram-action-btn" data-diagram-action="zoom-reset" type="button" title="Reset zoom">100%</button>
+            <button class="vex-diagram-action-btn" data-diagram-action="zoom-in" type="button" title="Zoom in">＋</button>
+          </div>
+        </div>
+        <div class="vex-diagram-viewport">
+          <div class="vex-diagram-canvas" id="canvas-${diagramId}">
+            ${svgContent}
+          </div>
+        </div>
+        <pre class="vex-diagram-source is-hidden"><code>${escapedCode}</code></pre>
+      </div>
+    `;
+  }
+
+  function renderNotionDatabase(csvText, dbIndex) {
+    const dbId = `vex-db-${dbIndex}`;
+    const { headers, rows } = parseCsvText(csvText);
+    if (!headers.length) {
+      return `<pre class="code-block"><code class="language-csv">${escapeHtml(csvText)}</code></pre>`;
+    }
+
+    const types = detectColumnTypes(headers, rows);
+    const statusColIdx = types.findIndex(t => t === "status");
+    const priorityColIdx = types.findIndex(t => t === "priority");
+    const estimateColIdx = headers.findIndex(h => /estimate|duration|time|hours/i.test(h));
+    const ownerColIdx = headers.findIndex(h => /owner|assignee|who|lead/i.test(h));
+
+    const statusValues = [];
+    if (statusColIdx >= 0) {
+      rows.forEach(r => {
+        const val = (r[statusColIdx] || "Todo").trim();
+        if (!statusValues.includes(val)) statusValues.push(val);
+      });
+    }
+    if (!statusValues.length) statusValues.push("Todo", "In Progress", "Done");
+
+    const boardGroups = statusValues.map(status => {
+      const items = rows.map((r, rowIdx) => ({
+        rowIdx,
+        title: r[0] || `Item ${rowIdx + 1}`,
+        status: statusColIdx >= 0 ? (r[statusColIdx] || "Todo").trim() : "Todo",
+        priority: priorityColIdx >= 0 ? r[priorityColIdx] : "",
+        estimate: estimateColIdx >= 0 ? r[estimateColIdx] : "",
+        owner: ownerColIdx >= 0 ? r[ownerColIdx] : ""
+      })).filter(item => item.status.toLowerCase() === status.toLowerCase());
+      return { name: status, items };
+    });
+
+    const getColTypeIcon = type => {
+      if (type === "status") return "●";
+      if (type === "priority") return "⚑";
+      if (type === "number") return "#";
+      if (type === "date") return "📅";
+      if (type === "tags") return "🏷";
+      return "≣";
+    };
+
+    return `
+      <div class="vex-database" data-db-id="${dbId}" data-db-idx="${dbIndex}">
+        <div class="vex-db-header">
+          <div class="vex-db-title-wrap">
+            <span class="vex-db-icon">▤</span>
+            <span class="vex-db-title">${escapeHtml(headers[0] || "Database")}</span>
+            <span class="vex-db-count-badge">${rows.length} records</span>
+          </div>
+          <div class="vex-db-controls">
+            <div class="vex-db-view-switcher">
+              <button class="vex-db-tab-btn active" data-db-tab="table" type="button">▤ Table</button>
+              <button class="vex-db-tab-btn" data-db-tab="board" type="button">◫ Board</button>
+            </div>
+            <input class="vex-db-search-input" placeholder="Search database…" aria-label="Filter database" />
+            <button class="vex-db-add-btn" data-db-action="add-row" type="button">+ New</button>
+            <button class="vex-db-add-btn" data-db-action="toggle-source" type="button">{ } CSV</button>
+          </div>
+        </div>
+
+        <div class="vex-db-table-container" id="${dbId}-table">
+          <table class="vex-db-table">
+            <thead>
+              <tr>
+                <th class="vex-db-th-num">#</th>
+                ${headers.map((h, colIdx) => `
+                  <th class="vex-db-th" data-col-idx="${colIdx}" title="Click to sort by ${escapeHtml(h)}">
+                    <div class="vex-col-header-content">
+                      <span class="vex-col-type-icon">${getColTypeIcon(types[colIdx])}</span>
+                      <span class="vex-col-name">${escapeHtml(h)}</span>
+                      <span class="vex-col-sort-icon">↕</span>
+                    </div>
+                  </th>
+                `).join("")}
+                <th class="vex-db-th-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((row, rowIdx) => `
+                <tr class="vex-db-row" data-row-idx="${rowIdx}">
+                  <td class="vex-db-td-num">${rowIdx + 1}</td>
+                  ${headers.map((_, colIdx) => {
+                    const val = row[colIdx] || "";
+                    const type = types[colIdx];
+                    if (type === "status") {
+                      return `<td class="vex-db-td" data-col-idx="${colIdx}"><span class="vex-status-pill ${getStatusPillClass(val)}" title="Click to advance status">${escapeHtml(val || "Todo")}</span></td>`;
+                    }
+                    if (type === "priority") {
+                      return `<td class="vex-db-td" data-col-idx="${colIdx}"><span class="vex-priority-badge ${getPriorityBadgeClass(val)}">${escapeHtml(val || "None")}</span></td>`;
+                    }
+                    return `<td class="vex-db-td" data-col-idx="${colIdx}"><input class="vex-db-cell-input" value="${escapeHtml(val)}" /></td>`;
+                  }).join("")}
+                  <td class="vex-db-td-actions">
+                    <button class="vex-db-del-btn" data-db-action="delete-row" data-row-idx="${rowIdx}" title="Delete row">×</button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="${headers.length + 2}">
+                  <div class="vex-db-footer">
+                    <span>${rows.length} items</span>
+                    <span>Notion-style Database</span>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="vex-db-board-container" id="${dbId}-board" style="display:none;">
+          <div class="vex-db-board-grid">
+            ${boardGroups.map(group => `
+              <div class="vex-db-board-column" data-status="${escapeHtml(group.name)}">
+                <div class="vex-db-col-header">
+                  <span class="vex-status-pill ${getStatusPillClass(group.name)}">${escapeHtml(group.name)}</span>
+                  <span class="vex-db-col-count">${group.items.length}</span>
+                </div>
+                <div class="vex-db-col-cards">
+                  ${group.items.map(item => `
+                    <div class="vex-db-card" data-row-idx="${item.rowIdx}" title="Click to advance status">
+                      <h5 class="vex-db-card-title">${escapeHtml(item.title)}</h5>
+                      <div class="vex-db-card-meta">
+                        ${item.priority ? `<span class="vex-priority-badge ${getPriorityBadgeClass(item.priority)}">${escapeHtml(item.priority)}</span>` : ""}
+                        ${item.estimate ? `<span class="vex-card-chip">⏱ ${escapeHtml(item.estimate)}</span>` : ""}
+                        ${item.owner ? `<span class="vex-card-chip">👤 ${escapeHtml(item.owner)}</span>` : ""}
+                      </div>
+                    </div>
+                  `).join("")}
+                </div>
+                <button class="vex-db-col-add-card" data-db-action="add-card-to-status" data-status="${escapeHtml(group.name)}" type="button">+ Add card</button>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+
+        <pre class="vex-db-raw-source is-hidden"><code>${escapeHtml(csvText)}</code></pre>
+      </div>
+    `;
+  }
+
+  function replaceCsvBlockInContent(markdown, dbIndex, newCsv) {
+    let currentIndex = 0;
+    return (markdown || "").replace(/```(?:csv|database|db|table)\n([\s\S]*?)```/g, (match, oldCsv) => {
+      if (currentIndex === dbIndex) {
+        currentIndex++;
+        return `\`\`\`csv\n${newCsv.trim()}\n\`\`\``;
+      }
+      currentIndex++;
+      return match;
+    });
+  }
+
+  function sortDatabaseRows(dbCard, colIdx, asc) {
+    const rawCodeEl = dbCard.querySelector(".vex-db-raw-source code");
+    if (!rawCodeEl) return;
+    const { headers, rows } = parseCsvText(rawCodeEl.textContent);
+    rows.sort((a, b) => {
+      const valA = (a[colIdx] || "").toLowerCase();
+      const valB = (b[colIdx] || "").toLowerCase();
+      const numA = parseFloat(valA.replace(/[^0-9.-]+/g, ""));
+      const numB = parseFloat(valB.replace(/[^0-9.-]+/g, ""));
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return asc ? numA - numB : numB - numA;
+      }
+      return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    });
+    const newCsv = serializeCsv(headers, rows);
+    const dbIdx = Number(dbCard.dataset.dbIdx);
+    const replaced = replaceCsvBlockInContent(state.content, dbIdx, newCsv);
+    if (replaced !== state.content) {
+      state.content = replaced;
+      persist("page");
+      const editor = document.querySelector(".editor-content");
+      if (editor) editor.textContent = state.content;
+      const preview = document.querySelector(".preview-pane");
+      if (preview) {
+        preview.innerHTML = renderMarkdownPreview(state.content);
+        hydrateMarkdownPreview(preview);
+      }
+    }
+  }
+
+  function escapeRegex(string) {
+    return String(string).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function getBacklinksForCurrentPage() {
+    const currentTitle = (state.title || "").trim().toLowerCase();
+    const currentId = state.pageId;
+    if (!currentTitle) return [];
+    return (state.pages || []).filter(page => {
+      if (page.id === currentId) return false;
+      const content = page.content || "";
+      const regex = new RegExp(`\\[\\[\\s*${escapeRegex(currentTitle)}(?:\\|[^\\]]+|#[^\\]]+)?\\s*\\]\\]`, "i");
+      return regex.test(content);
+    }).map(page => {
+      const content = page.content || "";
+      const match = content.match(new RegExp(`(?:^|\\n).*?\\[\\[\\s*${escapeRegex(currentTitle)}.*?(?:\\n|$)`, "i"));
+      const snippet = match ? match[0].trim().replace(/[#*`_>]/g, "").slice(0, 110) : "Referenced in document notes.";
+      return { id: page.id, title: page.title || "Untitled", snippet };
+    });
+  }
+
+  function scrollToBlock(blockRef) {
+    const cleanId = String(blockRef || "").replace(/^[#^]+/, "");
+    if (!cleanId) return;
+    const target = document.getElementById(`block-${cleanId}`) || document.querySelector(`[data-block-id="${cleanId}"]`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      const blockContainer = target.closest("p, blockquote, li, h1, h2, h3, div") || target;
+      blockContainer.classList.add("vex-block-target-active");
+      setTimeout(() => blockContainer.classList.remove("vex-block-target-active"), 2400);
+    }
+  }
+
+  function openPage(pageId, blockRef = null) {
+    ensureWorkspaceHistory();
+    const page = state.pages.find(p => p.id === pageId || (p.title && p.title.trim().toLowerCase() === String(pageId).trim().toLowerCase()));
+    if (!page) return false;
+    state.pageId = page.id;
+    state.title = page.title || "Untitled page";
+    state.content = page.content || "";
+    state.pageType = page.page_type || "ruled-single";
+    state.moodboard = false;
+    workspaceTab = "write";
+    persist("page");
+    renderApp();
+    if (blockRef) {
+      setTimeout(() => scrollToBlock(blockRef), 120);
+    }
+    return true;
+  }
+
+  function createAndOpenWikilinkNote(noteTitle, blockRef = null) {
+    ensureWorkspaceHistory();
+    const trimmed = (noteTitle || "Untitled").trim();
+    const newPage = normalizePage({
+      id: makeEntityId("page"),
+      title: trimmed,
+      content: `# ${trimmed}\n\n*Created via [[wikilink]]. Start writing here…*` + (blockRef ? `\n\n^${blockRef.replace(/^[#^]+/, "")}` : ""),
+      page_type: "ruled-single",
+      updated_at: new Date().toISOString()
+    }, firebaseUser?.uid);
+    state.pages.unshift(newPage);
+    state.pageId = newPage.id;
+    state.title = newPage.title;
+    state.content = newPage.content;
+    state.pageType = newPage.page_type;
+    state.moodboard = false;
+    workspaceTab = "write";
+    persist("page");
+    renderApp();
+    showToast(`Created note "${trimmed}"`);
+    if (blockRef) {
+      setTimeout(() => scrollToBlock(blockRef), 120);
+    }
+  }
+
   function renderMarkdownPreview(markdown = "") {
     const source = String(markdown || "");
     const placeholders = [];
@@ -566,13 +1250,17 @@
       return token;
     }
 
-    normalized = normalized.replace(/```(?:(\w+))?\n([\s\S]*?)```/g, (_, lang, code) => {
+    let csvBlockCounter = 0;
+    normalized = normalized.replace(/```(?:(\w+))?\n([\s\S]*?)```/g, (_, rawLang, code) => {
       const trimmed = code.trim();
+      const lang = (rawLang || "").toLowerCase();
       let html = "";
-      const language = lang ? ` class="language-${escapeHtml(lang)}"` : "";
-      if ((lang || "").toLowerCase() === "mermaid") {
-        html = `<pre class="mermaid-block"><code class="language-mermaid">${escapeHtml(trimmed)}</code></pre>`;
+      if (lang === "mermaid" || lang === "flowchart" || lang === "tikz" || lang === "diagram") {
+        html = renderDiagramBlock(trimmed, lang);
+      } else if (lang === "csv" || lang === "database" || lang === "db" || lang === "table") {
+        html = renderNotionDatabase(trimmed, csvBlockCounter++);
       } else {
+        const language = lang ? ` class="language-${escapeHtml(lang)}"` : "";
         html = `<pre class="code-block"><code${language}>${escapeHtml(trimmed)}</code></pre>`;
       }
       return pushToken(html);
@@ -590,7 +1278,38 @@
     normalized = normalized.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
     normalized = normalized.replace(/__(.+?)__/g, "<strong>$1</strong>");
     normalized = normalized.replace(/\*(.+?)\*/g, "<em>$1</em>");
-    normalized = normalized.replace(/\[\[(.+?)\]\]/g, (_, label) => `<span class="wiki-link">${escapeHtml(label)}</span>`);
+
+    // Paragraph Block Reference Anchors: line ending in " ^block-id"
+    normalized = normalized.replace(/\s+\^([a-zA-Z0-9_-]+)$/gm, (_, blockId) => ` <span class="vex-block-anchor" id="block-${escapeHtml(blockId)}" data-block-id="${escapeHtml(blockId)}" title="Click to copy block reference"><span class="block-sym">^</span>${escapeHtml(blockId)}</span>`);
+
+    // Wikilinks: [[Target]] or [[Target|Alias]] or [[Target#^block|Alias]] or [[#^block]]
+    normalized = normalized.replace(/\[\[([^\]\n]+)\]\]/g, (_, linkBody) => {
+      let target = linkBody.trim();
+      let alias = "";
+      let blockRef = "";
+
+      if (target.includes("|")) {
+        const parts = target.split("|");
+        target = parts[0].trim();
+        alias = parts.slice(1).join("|").trim();
+      }
+
+      if (target.includes("#")) {
+        const parts = target.split("#");
+        target = parts[0].trim();
+        blockRef = parts[1].trim();
+      } else if (target.startsWith("^")) {
+        blockRef = target;
+        target = "";
+      }
+
+      const displayLabel = alias || (target ? `${target}${blockRef ? ` > ${blockRef}` : ""}` : blockRef);
+      const isCurrent = !target || target.toLowerCase() === (state.title || "").toLowerCase();
+      const pageExists = isCurrent || state.pages.some(p => (p.title || "").trim().toLowerCase() === target.toLowerCase());
+
+      return `<a class="vex-wikilink ${pageExists ? "exists" : "new-page"}" data-wiki-target="${escapeHtml(target)}" data-block-ref="${escapeHtml(blockRef)}"><span class="wiki-glyph">✦</span>${escapeHtml(displayLabel)}${pageExists ? "" : `<span class="wiki-badge">new</span>`}</a>`;
+    });
+
     normalized = normalized.replace(/\[(.+?)\]\((https?:\/\/[^)]+|\/[^)]+|#[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
     normalized = normalized.replace(/`([^`]+)`/g, "<code>$1</code>");
     normalized = normalized.replace(/\$\$\s*([\s\S]+?)\s*\$\$/g, (_, expression) => renderKatexHtml(expression.trim(), true));
@@ -602,11 +1321,360 @@
     const segments = normalized.split(/\n\n+/).map(block => {
       const trimmed = block.trim();
       if (!trimmed) return "";
-      if (/<h[1-6]|<blockquote>|<ul>|<ol>|<pre|<table>|<p>|<li>/.test(trimmed)) return trimmed;
+      if (/<h[1-6]|<blockquote>|<ul>|<ol>|<pre|<table>|<p>|<li>|<div class="vex-/.test(trimmed)) return trimmed;
       return `<p>${trimmed}</p>`;
     }).filter(Boolean).join("\n");
 
-    return segments;
+    const backlinks = getBacklinksForCurrentPage();
+    const backlinksHtml = backlinks.length ? `
+      <section class="vex-backlinks-section">
+        <div class="vex-backlinks-head">
+          <span class="vex-backlinks-badge">⛓ ${backlinks.length} Linked Mention${backlinks.length > 1 ? "s" : ""}</span>
+          <span class="vex-backlinks-subtitle">Notes referencing <em>${escapeHtml(state.title)}</em></span>
+        </div>
+        <div class="vex-backlinks-grid">
+          ${backlinks.map(item => `
+            <button class="vex-backlink-card" data-action="open-page-id" data-page-id="${item.id}" type="button">
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.snippet)}</span>
+            </button>
+          `).join("")}
+        </div>
+      </section>
+    ` : "";
+
+    return segments + backlinksHtml;
+  }
+
+  function hydrateMarkdownPreview(container) {
+    if (!container) return;
+    hydrateDiagrams(container);
+    hydrateNotionDatabases(container);
+    hydrateWikilinks(container);
+  }
+
+  function hydrateDiagrams(container) {
+    const isDark = state.theme === "dark";
+    if (window.mermaid) {
+      try {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          theme: isDark ? "dark" : "default",
+          securityLevel: "loose",
+          fontFamily: "'Space Grotesk', -apple-system, sans-serif"
+        });
+      } catch (_) {}
+    }
+
+    container.querySelectorAll(".vex-diagram-card").forEach(async (card, idx) => {
+      const diagramId = card.dataset.diagramId;
+      const lang = card.dataset.diagramLang;
+      const codeEl = card.querySelector(".vex-diagram-source code");
+      const rawCode = codeEl ? codeEl.textContent : "";
+      const canvas = card.querySelector(".vex-diagram-canvas");
+
+      if (lang === "mermaid" && window.mermaid && rawCode) {
+        const renderId = `mermaid-render-${diagramId}-${idx}`;
+        try {
+          const { svg } = await window.mermaid.render(renderId, rawCode);
+          if (svg && canvas) {
+            canvas.innerHTML = svg;
+          }
+        } catch (err) {
+          console.warn("Mermaid render warning:", err);
+        }
+      }
+
+      let zoom = 1;
+      const updateZoom = z => {
+        zoom = Math.min(2.5, Math.max(0.4, z));
+        if (canvas) canvas.style.transform = `scale(${zoom})`;
+        const resetBtn = card.querySelector("[data-diagram-action='zoom-reset']");
+        if (resetBtn) resetBtn.textContent = `${Math.round(zoom * 100)}%`;
+      };
+
+      card.querySelectorAll("[data-diagram-action]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const action = btn.dataset.diagramAction;
+          if (action === "zoom-in") updateZoom(zoom + 0.15);
+          if (action === "zoom-out") updateZoom(zoom - 0.15);
+          if (action === "zoom-reset") updateZoom(1);
+          if (action === "toggle-code") {
+            const src = card.querySelector(".vex-diagram-source");
+            src?.classList.toggle("is-hidden");
+          }
+          if (action === "copy-code") {
+            if (rawCode) {
+              navigator.clipboard?.writeText(rawCode).then(() => showToast("Copied diagram code"));
+            }
+          }
+        });
+      });
+    });
+  }
+
+  function hydrateNotionDatabases(container) {
+    container.querySelectorAll(".vex-database").forEach(dbCard => {
+      const dbId = dbCard.dataset.dbId;
+      const dbIdx = Number(dbCard.dataset.dbIdx);
+      const rawCodeEl = dbCard.querySelector(".vex-db-raw-source code");
+      let rawCsv = rawCodeEl ? rawCodeEl.textContent : "";
+
+      const tableContainer = dbCard.querySelector(`#${dbId}-table`);
+      const boardContainer = dbCard.querySelector(`#${dbId}-board`);
+      const searchInput = dbCard.querySelector(".vex-db-search-input");
+      const rawSource = dbCard.querySelector(".vex-db-raw-source");
+
+      dbCard.querySelectorAll(".vex-db-tab-btn").forEach(tabBtn => {
+        tabBtn.addEventListener("click", () => {
+          dbCard.querySelectorAll(".vex-db-tab-btn").forEach(b => b.classList.remove("active"));
+          tabBtn.classList.add("active");
+          const tab = tabBtn.dataset.dbTab;
+          if (tab === "table") {
+            if (tableContainer) tableContainer.style.display = "";
+            if (boardContainer) boardContainer.style.display = "none";
+          } else {
+            if (tableContainer) tableContainer.style.display = "none";
+            if (boardContainer) boardContainer.style.display = "";
+          }
+        });
+      });
+
+      dbCard.querySelectorAll("[data-db-action='toggle-source']").forEach(btn => {
+        btn.addEventListener("click", () => {
+          rawSource?.classList.toggle("is-hidden");
+        });
+      });
+
+      if (searchInput) {
+        searchInput.addEventListener("input", e => {
+          const q = (e.target.value || "").toLowerCase().trim();
+          tableContainer?.querySelectorAll(".vex-db-row").forEach(row => {
+            const text = (row.textContent || "").toLowerCase();
+            row.style.display = (!q || text.includes(q)) ? "" : "none";
+          });
+          boardContainer?.querySelectorAll(".vex-db-card").forEach(card => {
+            const text = (card.textContent || "").toLowerCase();
+            card.style.display = (!q || text.includes(q)) ? "" : "none";
+          });
+        });
+      }
+
+      let currentSort = { col: -1, asc: true };
+      tableContainer?.querySelectorAll(".vex-db-th[data-col-idx]").forEach(th => {
+        th.addEventListener("click", () => {
+          const colIdx = Number(th.dataset.colIdx);
+          const asc = currentSort.col === colIdx ? !currentSort.asc : true;
+          currentSort = { col: colIdx, asc };
+          sortDatabaseRows(dbCard, colIdx, asc);
+        });
+      });
+
+      const updateAndSyncCsv = (newCsv) => {
+        const replaced = replaceCsvBlockInContent(state.content, dbIdx, newCsv);
+        if (replaced !== state.content) {
+          state.content = replaced;
+          persist("page");
+          const editor = document.querySelector(".editor-content");
+          if (editor) editor.textContent = state.content;
+          const preview = document.querySelector(".preview-pane");
+          if (preview) {
+            preview.innerHTML = renderMarkdownPreview(state.content);
+            hydrateMarkdownPreview(preview);
+          }
+        }
+      };
+
+      dbCard.querySelectorAll(".vex-status-pill").forEach(pill => {
+        pill.addEventListener("click", e => {
+          e.stopPropagation();
+          const rowIdx = Number(pill.closest("[data-row-idx]")?.dataset.rowIdx);
+          if (isNaN(rowIdx)) return;
+          const { headers, rows } = parseCsvText(rawCsv);
+          if (!rows[rowIdx]) return;
+          const statusColIdx = headers.findIndex(h => /status|state|stage/i.test(h));
+          const targetCol = statusColIdx >= 0 ? statusColIdx : 1;
+          const currentStatus = (rows[rowIdx][targetCol] || "Todo").trim().toLowerCase();
+          let nextStatus = "In Progress";
+          if (currentStatus === "todo" || currentStatus === "backlog" || currentStatus === "planned") nextStatus = "In Progress";
+          else if (currentStatus === "in progress" || currentStatus === "doing" || currentStatus === "active") nextStatus = "Done";
+          else if (currentStatus === "done" || currentStatus === "completed") nextStatus = "Review";
+          else nextStatus = "Todo";
+          rows[rowIdx][targetCol] = nextStatus;
+          const newCsv = serializeCsv(headers, rows);
+          updateAndSyncCsv(newCsv);
+          showToast(`Status updated to ${nextStatus}`);
+        });
+      });
+
+      boardContainer?.querySelectorAll(".vex-db-card").forEach(card => {
+        card.addEventListener("click", () => {
+          const rowIdx = Number(card.dataset.rowIdx);
+          if (isNaN(rowIdx)) return;
+          const { headers, rows } = parseCsvText(rawCsv);
+          if (!rows[rowIdx]) return;
+          const statusColIdx = headers.findIndex(h => /status|state|stage/i.test(h));
+          const targetCol = statusColIdx >= 0 ? statusColIdx : 1;
+          const currentStatus = (rows[rowIdx][targetCol] || "Todo").trim().toLowerCase();
+          let nextStatus = "In Progress";
+          if (currentStatus.includes("todo")) nextStatus = "In Progress";
+          else if (currentStatus.includes("progress")) nextStatus = "Done";
+          else if (currentStatus.includes("done")) nextStatus = "Review";
+          else nextStatus = "Todo";
+          rows[rowIdx][targetCol] = nextStatus;
+          const newCsv = serializeCsv(headers, rows);
+          updateAndSyncCsv(newCsv);
+          showToast(`Moved to ${nextStatus}`);
+        });
+      });
+
+      dbCard.querySelectorAll("[data-db-action='delete-row']").forEach(delBtn => {
+        delBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          const rowIdx = Number(delBtn.dataset.rowIdx);
+          if (isNaN(rowIdx)) return;
+          const { headers, rows } = parseCsvText(rawCsv);
+          rows.splice(rowIdx, 1);
+          const newCsv = serializeCsv(headers, rows);
+          updateAndSyncCsv(newCsv);
+          showToast("Item removed");
+        });
+      });
+
+      dbCard.querySelectorAll("[data-db-action='add-row']").forEach(addBtn => {
+        addBtn.addEventListener("click", () => {
+          const { headers, rows } = parseCsvText(rawCsv);
+          const newRow = headers.map((h, i) => {
+            const low = h.toLowerCase();
+            if (low.includes("status")) return "Todo";
+            if (low.includes("priority")) return "Medium";
+            if (low.includes("estimate")) return "1h";
+            if (low.includes("owner")) return "Me";
+            if (i === 0) return `New item ${rows.length + 1}`;
+            return "";
+          });
+          rows.push(newRow);
+          const newCsv = serializeCsv(headers, rows);
+          updateAndSyncCsv(newCsv);
+          showToast("Added new database item");
+        });
+      });
+
+      boardContainer?.querySelectorAll("[data-db-action='add-card-to-status']").forEach(addCardBtn => {
+        addCardBtn.addEventListener("click", () => {
+          const status = addCardBtn.dataset.status || "Todo";
+          const { headers, rows } = parseCsvText(rawCsv);
+          const statusColIdx = headers.findIndex(h => /status|state|stage/i.test(h));
+          const newRow = headers.map((h, i) => {
+            if (i === statusColIdx) return status;
+            if (i === 0) return `New card in ${status}`;
+            if (/priority/i.test(h)) return "Medium";
+            if (/estimate/i.test(h)) return "1h";
+            return "";
+          });
+          rows.push(newRow);
+          const newCsv = serializeCsv(headers, rows);
+          updateAndSyncCsv(newCsv);
+          showToast(`Added card to ${status}`);
+        });
+      });
+
+      tableContainer?.querySelectorAll(".vex-db-cell-input").forEach(cellInput => {
+        cellInput.addEventListener("blur", e => {
+          const rowIdx = Number(cellInput.closest("[data-row-idx]")?.dataset.rowIdx);
+          const colIdx = Number(cellInput.closest("[data-col-idx]")?.dataset.colIdx);
+          const val = e.target.value;
+          const { headers, rows } = parseCsvText(rawCsv);
+          if (rows[rowIdx] && rows[rowIdx][colIdx] !== val) {
+            rows[rowIdx][colIdx] = val;
+            const newCsv = serializeCsv(headers, rows);
+            updateAndSyncCsv(newCsv);
+          }
+        });
+        cellInput.addEventListener("keydown", e => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            cellInput.blur();
+          }
+        });
+      });
+    });
+  }
+
+  function hydrateWikilinks(container) {
+    container.querySelectorAll(".vex-block-anchor").forEach(anchor => {
+      anchor.addEventListener("click", e => {
+        e.stopPropagation();
+        const blockId = anchor.dataset.blockId;
+        const currentTitle = state.title || "Note";
+        const linkSyntax = `[[${currentTitle}#^${blockId}]]`;
+        navigator.clipboard?.writeText(linkSyntax).then(() => {
+          showToast(`Copied block link: ${linkSyntax}`);
+        }).catch(() => {
+          showToast(`Block link: ${linkSyntax}`);
+        });
+        anchor.classList.add("vex-block-target-active");
+        setTimeout(() => anchor.classList.remove("vex-block-target-active"), 1800);
+      });
+    });
+
+    container.querySelectorAll(".vex-wikilink").forEach(link => {
+      const targetNote = link.dataset.wikiTarget || "";
+      const blockRef = link.dataset.blockRef || "";
+
+      link.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isCurrent = !targetNote || targetNote.toLowerCase() === (state.title || "").toLowerCase();
+        if (isCurrent && blockRef) {
+          scrollToBlock(blockRef);
+          return;
+        }
+
+        const page = state.pages.find(p => (p.title || "").trim().toLowerCase() === targetNote.trim().toLowerCase());
+        if (page) {
+          openPage(page.id, blockRef);
+        } else {
+          createAndOpenWikilinkNote(targetNote, blockRef);
+        }
+      });
+
+      link.addEventListener("mouseenter", e => {
+        const page = state.pages.find(p => (p.title || "").trim().toLowerCase() === targetNote.trim().toLowerCase());
+        showWikilinkTooltip(e, targetNote, page, blockRef);
+      });
+      link.addEventListener("mouseleave", hideWikilinkTooltip);
+    });
+  }
+
+  function showWikilinkTooltip(e, targetNote, page, blockRef) {
+    hideWikilinkTooltip();
+    const tooltip = document.createElement("div");
+    tooltip.className = "vex-wikilink-tooltip";
+    let snippet = page ? (page.content || "").replace(/[#*`_>]/g, "").trim().slice(0, 140) + "…" : "Click to create this note.";
+    if (page && blockRef) {
+      const cleanBlock = blockRef.replace(/^#?\^?/, "");
+      const lines = (page.content || "").split("\n");
+      const matchedLine = lines.find(l => l.includes(`^${cleanBlock}`));
+      if (matchedLine) snippet = `^${cleanBlock}: ` + matchedLine.replace(new RegExp(`\\^${cleanBlock}`), "").replace(/[#*`_>]/g, "").trim();
+    }
+    tooltip.innerHTML = `
+      <strong>${escapeHtml(page ? page.title : targetNote)} ${page ? "↗" : "+ new"}</strong>
+      <p>${escapeHtml(snippet)}</p>
+    `;
+    document.body.appendChild(tooltip);
+    wikilinkTooltipEl = tooltip;
+
+    const rect = e.target.getBoundingClientRect();
+    tooltip.style.left = `${Math.min(window.innerWidth - 300, Math.max(12, rect.left))}px`;
+    tooltip.style.top = `${rect.bottom + 8}px`;
+  }
+
+  function hideWikilinkTooltip() {
+    if (wikilinkTooltipEl) {
+      wikilinkTooltipEl.remove();
+      wikilinkTooltipEl = null;
+    }
   }
 
   function editorToMarkdown(editor) {
@@ -765,12 +1833,13 @@
 
   function renderKeyboard() {
     const keyboardLabel = state.keyboardVisible ? "Hide Vex keyboard" : "Show Vex keyboard";
-    return `<button class="keyboard-toggle ${state.keyboardVisible ? "active" : ""}" data-action="toggle-keyboard" aria-label="${keyboardLabel}" aria-expanded="${state.keyboardVisible ? "true" : "false"}" title="${keyboardLabel}">${icon("keyboard")}</button><div class="keyboard-dock ${state.keyboardVisible ? "" : "is-hidden"}" aria-hidden="${state.keyboardVisible ? "false" : "true"}"><div class="keyboard-shell"><div class="keyboard-top"><span>vex / soft press</span><span>${state.muted ? "sound off" : "sound on"}</span></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
+    const showFormatting = state.keyboardVisible && workspaceTab === "write" && !state.moodboard;
+    return `<button class="keyboard-toggle ${state.keyboardVisible ? "active" : ""}" data-action="toggle-keyboard" aria-label="${keyboardLabel}" aria-expanded="${state.keyboardVisible ? "true" : "false"}" title="${keyboardLabel}">${icon("keyboard")}</button><div class="keyboard-dock ${state.keyboardVisible ? "" : "is-hidden"}" aria-hidden="${state.keyboardVisible ? "false" : "true"}"><div class="keyboard-shell"><div class="keyboard-top"><div class="keyboard-top-brand"><span>vex / soft press</span></div>${showFormatting ? renderFormatBar("in-keyboard") : ""}<div class="keyboard-top-status"><button class="sound-chip" data-action="toggle-sound" title="${state.muted ? "Sound muted — click to turn on" : "Sound on — click to mute"}" aria-label="Toggle keyboard sound"><span class="sound-dot ${state.muted ? "muted" : "active"}">●</span><span>${state.muted ? "sound off" : "sound on"}</span></button></div></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
   }
 
-  function renderFormatBar() {
-    return `<div class="format-bar">
-      <button data-format="bold" title="Bold">${icon("bold")}</button><button data-format="italic" title="Italic"><i>${icon("italic")}</i></button><button data-format="heading" title="Heading">H</button><button data-format="quote" title="Quote">❝</button><span class="divider"></span><button data-format="code" title="Inline code">${icon("code")}</button><button data-format="math" title="LaTeX">∑</button><span class="divider"></span><button data-action="preview-markdown" title="Preview markdown">Preview</button>
+  function renderFormatBar(variant = "default") {
+    return `<div class="format-bar ${variant}">
+      <button data-format="bold" title="Bold" aria-label="Bold">${icon("bold")}</button><button data-format="italic" title="Italic" aria-label="Italic"><i>${icon("italic")}</i></button><button data-format="heading" title="Heading" aria-label="Heading">H</button><button data-format="quote" title="Quote" aria-label="Quote">❝</button><span class="divider"></span><button data-format="code" title="Inline code" aria-label="Inline code">${icon("code")}</button><button data-format="math" title="LaTeX" aria-label="LaTeX">∑</button><span class="divider"></span><button data-action="preview-markdown" title="Preview markdown">Preview</button>
     </div>`;
   }
 
@@ -783,19 +1852,22 @@
     ];
     const previewMarkup = state.viewMode !== "edit" ? `<div class="preview-pane">${renderMarkdownPreview(state.content)}</div>` : "";
     const editorMarkup = state.viewMode !== "preview" ? `<div class="editor-pane"><div class="editor-content ${touchMode ? "mobile-editor-content" : ""}" contenteditable="${touchMode ? "false" : "true"}" inputmode="text" spellcheck="false" data-placeholder="Start with a sentence, a question, or a tiny spark…">${escapeHtml(state.content)}</div></div>` : "";
-    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" ${touchMode ? "readonly inputmode=none" : ""} /><div class="editor-tools"><div class="mode-switcher">${modeButtons.map(item => `<button class="${state.viewMode === item.id ? "active" : ""}" data-action="set-view-mode" data-view-mode="${item.id}">${item.label}</button>`).join("")}</div><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>${touchMode ? "Use the Vex keyboard below" : "Today · just now"}</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-shell ${state.viewMode === "split" ? "split-view" : ""}">${editorMarkup}${previewMarkup}</div></div>${renderFormatBar()}</section>`;
+    const showMetaFormatBar = !state.keyboardVisible;
+    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" ${touchMode ? "readonly inputmode=none" : ""} /><div class="editor-tools"><div class="mode-switcher">${modeButtons.map(item => `<button class="${state.viewMode === item.id ? "active" : ""}" data-action="set-view-mode" data-view-mode="${item.id}">${item.label}</button>`).join("")}</div><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><div class="page-meta-left"><span>${touchMode ? "Use the Vex keyboard below" : "Today · just now"}</span></div><div class="page-meta-right"><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div>${showMetaFormatBar ? renderFormatBar("in-meta") : ""}</div></div><div class="page-card ${pageClass()}"><div class="editor-shell ${state.viewMode === "split" ? "split-view" : ""}">${editorMarkup}${previewMarkup}</div></div></section>`;
   }
 
   function renderMoodboard() {
     ensureWorkspaceHistory();
     const board = state.boards.find(item => item.id === state.activeBoardId) || state.boards[0];
     const zoomPercent = Math.round(state.boardZoom * 100);
-        return `<section class="editor-stage moodboard-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(board.title)}" aria-label="Moodboard title" readonly /><div class="editor-tools"><button class="pill-btn" data-action="share-board">↗ <span>Share</span></button><button class="pill-btn" data-action="new-board">${icon("plus")} <span>New board</span></button>
+    const hasSelection = Boolean(selectedMoodId && state.mood.some(piece => piece.id === selectedMoodId));
+    return `<section class="editor-stage moodboard-stage ${hasSelection ? "has-inspector" : ""}"><div class="editor-head"><input class="page-title" value="${escapeHtml(board.title)}" aria-label="Moodboard title" readonly /><div class="editor-tools"><button class="pill-btn" data-action="share-board">↗ <span>Share</span></button><button class="pill-btn" data-action="new-board">${icon("plus")} <span>New board</span></button>
 <label class="primary-btn">${icon("plus")} Add media<input type="file" accept="image/*,video/*" multiple hidden data-file-upload /></label><button class="pill-btn" data-action="add-note">${icon("note")} <span>Note</span></button></div></div><div class="page-meta"><span>Endless canvas · drag to pan · scroll to zoom</span><div class="page-switcher">${state.boards.map(item => `<button class="${item.id === state.activeBoardId ? "active" : ""}" data-action="select-board" data-board-id="${item.id}">${escapeHtml(item.title)}</button>`).join("")}<button data-action="zoom-board" data-zoom="out">−</button><button class="active" data-zoom-label>${zoomPercent}%</button><button data-action="zoom-board" data-zoom="in">+</button><button data-action="zoom-board" data-zoom="reset">reset</button></div></div><div class="moodboard" data-moodboard><div class="mood-canvas" style="transform:translate(${state.boardPan.x}px,${state.boardPan.y}px) scale(${state.boardZoom})">${state.mood.map(renderMoodItem).join("")}</div>${state.mood.length === 0 ? `<div class="mood-empty"><div><strong>Your canvas is wide open.</strong>Drop in an image, video, or note to begin.</div></div>` : ""}</div>${renderMoodInspector()}</section>`;
   }
   function renderMoodInspector() {
+    if (!selectedMoodId) return "";
     const item = state.mood.find(piece => piece.id === selectedMoodId);
-    if (!item) return `<aside class="mood-inspector mood-inspector-empty"><div class="inspector-orbit">✦</div><strong>Select a piece</strong><p>Choose a note or image on the canvas to edit its details.</p></aside>`;
+    if (!item) return "";
     const isNote = item.type === "note";
     const colors = ["yellow", "pink", "blue", "green"];
     return `<aside class="mood-inspector"><div class="inspector-head"><div><p class="side-label">selected piece</p><strong>${isNote ? "Note" : "Media"}</strong></div><button class="icon-btn" data-action="clear-mood-selection" aria-label="Close inspector">×</button></div><div class="inspector-preview ${item.color || "yellow"}">${isNote ? `<strong>${escapeHtml(item.title || "new thought")}</strong><span>${escapeHtml(item.text || "")}</span>` : `<span>${escapeHtml(item.name || "Uploaded media")}</span>`}</div>${isNote ? `<label class="inspector-label">Title<input data-mood-field="title" value="${escapeHtml(item.title || "")}" /></label><label class="inspector-label">Text<textarea data-mood-field="text" rows="5">${escapeHtml(item.text || "")}</textarea></label><div class="inspector-control"><span>Color</span><div class="color-options">${colors.map(color => `<button class="color-dot ${color} ${item.color === color ? "active" : ""}" data-mood-color="${color}" aria-label="${color} color"></button>`).join("")}</div></div><label class="inspector-label">Font<select data-mood-field="fontFamily"><option value="Space Grotesk" ${item.fontFamily === "Space Grotesk" ? "selected" : ""}>Space Grotesk</option><option value="IBM Plex Mono" ${item.fontFamily === "IBM Plex Mono" ? "selected" : ""}>IBM Plex Mono</option><option value="Georgia" ${item.fontFamily === "Georgia" ? "selected" : ""}>Georgia</option></select></label><label class="inspector-label">Size<select data-mood-field="fontSize"><option value="13" ${Number(item.fontSize || 13) === 13 ? "selected" : ""}>Small</option><option value="16" ${Number(item.fontSize || 13) === 16 ? "selected" : ""}>Medium</option><option value="20" ${Number(item.fontSize || 13) === 20 ? "selected" : ""}>Large</option><option value="26" ${Number(item.fontSize || 13) === 26 ? "selected" : ""}>XL</option></select></label><div class="inspector-control"><span>Style</span><div class="style-options"><button class="${item.fontWeight === 700 ? "active" : ""}" data-mood-style="bold">B</button><button class="${item.fontStyle === "italic" ? "active" : ""}" data-mood-style="italic"><i>I</i></button><button class="${item.textAlign === "center" ? "active" : ""}" data-mood-style="center">Center</button></div></div>` : `<label class="inspector-label">Caption<input data-mood-field="name" value="${escapeHtml(item.name || "")}" /></label>`}<button class="danger-btn" data-action="delete-mood-item">Delete piece</button></aside>`;
@@ -816,6 +1888,11 @@
 
   function getSlashCommandItems() {
     return [
+      { id: "database", label: "Notion Database", value: "```csv\nFeature, Status, Priority, Estimate, Owner\nSpatial Moodboard, Done, High, 4h, Design\nLive Diagrams (Mermaid & TikZ), In Progress, Critical, 3h, Visual\nNotion CSV Table & Board, In Progress, Critical, 2h, Frontend\nWikilinks & Block Refs, Done, High, 2h, Graph\n```\n\n", search: "database csv table board kanban notion" },
+      { id: "mermaid", label: "Mermaid Flowchart", value: "```mermaid\nflowchart TD\n  Sparks([Sparks]) --> Draft[Draft Note]\n  Draft --> Review{Review}\n  Review -->|Clear| Ship([Publish ✦])\n  Review -->|Iterate| Draft\n```\n\n", search: "diagram mermaid flowchart" },
+      { id: "tikz", label: "TikZ Diagram", value: "```tikz\n\\node[draw, circle] (A) at (0, 0) {Idea};\n\\node[draw, rectangle] (B) at (3, 0) {Draft};\n\\node[draw, circle] (C) at (6, 0) {Publish};\n\\draw[->] (A) -- (B);\n\\draw[->] (B) -- (C);\n```\n\n", search: "diagram tikz latex" },
+      { id: "wikilink", label: "Wikilink", value: "[[Note Title]]", search: "wikilink link page" },
+      { id: "blockref", label: "Block Reference", value: " ^key-point\n", search: "blockref anchor reference" },
       { id: "heading-1", label: "Heading 1", value: "# Heading\n\n", search: "heading h1" },
       { id: "heading-2", label: "Heading 2", value: "## Heading\n\n", search: "heading h2" },
       { id: "heading-3", label: "Heading 3", value: "### Heading\n\n", search: "heading h3" },
@@ -829,8 +1906,7 @@
       { id: "divider", label: "Divider", value: "---\n\n", search: "divider separator" },
       { id: "link", label: "Link", value: "[Vex](https://vexnote.vercel.app)\n\n", search: "link url" },
       { id: "image", label: "Image", value: "![Alt text](https://example.com/image.png)\n\n", search: "image media" },
-      { id: "math", label: "Math block", value: "$$\nE = mc^2\n$$\n\n", search: "math latex equation" },
-      { id: "mermaid", label: "Mermaid", value: "```mermaid\nflowchart TD\n  A --> B\n```\n\n", search: "diagram mermaid" }
+      { id: "math", label: "Math block", value: "$$\nE = mc^2\n$$\n\n", search: "math latex equation" }
     ];
   }
 
@@ -1024,18 +2100,74 @@
     if (workspaceTab === "typing" && !typingSession.ready) resetTypingSession(typingSession.exerciseId);
   }
 
+  function deletePage(pageId) {
+    if (state.pages.length <= 1) {
+      showToast("Cannot delete the only page");
+      return;
+    }
+    deletedPageIds.add(pageId);
+    state.pages = state.pages.filter(p => p.id !== pageId);
+    if (state.pageId === pageId) {
+      const next = state.pages[0];
+      state.pageId = next.id;
+      state.title = next.title || "Untitled page";
+      state.content = next.content || "";
+      state.pageType = next.page_type || "ruled-single";
+    }
+    persist("page");
+    renderAll();
+    showToast("Page deleted");
+  }
+
+  function deleteBoard(boardId) {
+    if (state.boards.length <= 1) {
+      showToast("Cannot delete the only board");
+      return;
+    }
+    deletedBoardIds.add(boardId);
+    state.boards = state.boards.filter(b => b.id !== boardId);
+    delete state.boardItems[boardId];
+    if (state.activeBoardId === boardId) {
+      const next = state.boards[0];
+      setActiveBoard(next.id);
+    }
+    persist("board");
+    renderAll();
+    showToast("Moodboard deleted");
+  }
+
   function showPagesModal() {
     ensureWorkspaceHistory();
     document.querySelector(".history-backdrop")?.remove();
     const backdrop = document.createElement("div");
     backdrop.className = "history-backdrop";
-    const pageRows = state.pages.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(page => `<button class="history-row" data-history-page="${page.id}"><span class="history-icon">${icon("note")}</span><span><strong>${escapeHtml(page.title || "Untitled page")}</strong><small>${escapeHtml((page.content || "").replace(/[#*`\n]/g, " ").slice(0, 88) || "Empty page")}</small></span><time>${page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "starter"}</time></button>`).join("");
-    const boardRows = state.boards.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(board => `<button class="history-row" data-history-board="${board.id}"><span class="history-icon board-icon">${icon("board")}</span><span><strong>${escapeHtml(board.title || "Untitled board")}</strong><small>${board.item_count || 0} pieces on the canvas</small></span><time>${board.updated_at ? new Date(board.updated_at).toLocaleDateString() : "starter"}</time></button>`).join("");
+    const pageRows = state.pages.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(page => `
+      <div class="history-row-wrap" style="display:flex;align-items:center;width:100%;gap:8px;">
+        <button class="history-row" data-history-page="${page.id}" style="flex:1;">
+          <span class="history-icon">${icon("note")}</span>
+          <span><strong>${escapeHtml(page.title || "Untitled page")}</strong><small>${escapeHtml((page.content || "").replace(/[#*`\n]/g, " ").slice(0, 88) || "Empty page")}</small></span>
+          <time>${page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "starter"}</time>
+        </button>
+        ${state.pages.length > 1 ? `<button class="ghost-btn" data-delete-page="${page.id}" title="Delete page" style="padding:6px 10px;font-size:12px;opacity:0.6;" type="button">✕</button>` : ""}
+      </div>
+    `).join("");
+    const boardRows = state.boards.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(board => `
+      <div class="history-row-wrap" style="display:flex;align-items:center;width:100%;gap:8px;">
+        <button class="history-row" data-history-board="${board.id}" style="flex:1;">
+          <span class="history-icon board-icon">${icon("board")}</span>
+          <span><strong>${escapeHtml(board.title || "Untitled board")}</strong><small>${board.item_count || 0} pieces on the canvas</small></span>
+          <time>${board.updated_at ? new Date(board.updated_at).toLocaleDateString() : "starter"}</time>
+        </button>
+        ${state.boards.length > 1 ? `<button class="ghost-btn" data-delete-board="${board.id}" title="Delete board" style="padding:6px 10px;font-size:12px;opacity:0.6;" type="button">✕</button>` : ""}
+      </div>
+    `).join("");
     backdrop.innerHTML = `<div class="history-modal"><button class="auth-close" data-action="close-history" aria-label="Close history">×</button><span class="eyebrow"><b>✦</b> your archive</span><h2>Past activity</h2><p class="history-subtitle">Your notes and moodboards, kept private to this account.</p><p class="side-label">notes</p><div class="history-list">${pageRows || `<div class="history-empty">No saved notes yet.</div>`}</div><p class="side-label">moodboards</p><div class="history-list">${boardRows || `<div class="history-empty">No saved moodboards yet.</div>`}</div></div>`;
     document.body.appendChild(backdrop);
     backdrop.addEventListener("click", event => { if (event.target === backdrop || event.target.closest("[data-action='close-history']")) backdrop.remove(); });
     backdrop.querySelectorAll("[data-history-page]").forEach(button => button.addEventListener("click", () => { const page = state.pages.find(item => item.id === button.dataset.historyPage); if (!page) return; state.pageId=page.id; state.title=page.title || "Untitled page"; state.content=page.content || ""; state.pageType=page.page_type || "ruled-single"; state.moodboard=false; workspaceTab="write"; backdrop.remove(); renderApp(); }));
     backdrop.querySelectorAll("[data-history-board]").forEach(button => button.addEventListener("click", () => { setActiveBoard(button.dataset.historyBoard); state.moodboard=true; workspaceTab="write"; backdrop.remove(); renderApp(); }));
+    backdrop.querySelectorAll("[data-delete-page]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); deletePage(button.dataset.deletePage); backdrop.remove(); showPagesModal(); }));
+    backdrop.querySelectorAll("[data-delete-board]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); deleteBoard(button.dataset.deleteBoard); backdrop.remove(); showPagesModal(); }));
   }
 
   function renderAll() { activeView === "landing" ? renderLanding() : renderApp(); }
@@ -1125,7 +2257,10 @@
         persist("page");
         if (state.viewMode !== "edit") {
           const preview = document.querySelector(".preview-pane");
-          if (preview) preview.innerHTML = renderMarkdownPreview(state.content);
+          if (preview) {
+            preview.innerHTML = renderMarkdownPreview(state.content);
+            hydrateMarkdownPreview(preview);
+          }
         }
       });
       editor.addEventListener("keydown", e => {
@@ -1146,7 +2281,24 @@
     root.querySelectorAll("[data-file-upload]").forEach(input => input.addEventListener("change", e => handleFiles(e.target.files)));
     root.querySelectorAll(".mood-note, .mood-image").forEach(item => enableDrag(item));
     const moodboard = root.querySelector("[data-moodboard]");
-    if (moodboard) enableCanvasPan(moodboard);
+    if (moodboard) {
+      enableCanvasPan(moodboard);
+      moodboard.addEventListener("click", event => {
+        if (!event.target.closest(".mood-note, .mood-image, .mood-inspector")) {
+          if (selectedMoodId) {
+            selectedMoodId = "";
+            renderApp();
+          }
+        }
+      });
+    }
+    const previewPane = root.querySelector(".preview-pane");
+    if (previewPane) {
+      hydrateMarkdownPreview(previewPane);
+    }
+    root.querySelectorAll("[data-action='open-page-id']").forEach(btn => {
+      btn.addEventListener("click", () => openPage(btn.dataset.pageId));
+    });
     updateSyncLabels();
   }
 
@@ -1378,6 +2530,37 @@
   function userBoard(uid) { return userRoot(uid).collection("boards").doc("moodboard"); }
   function userTyping(uid) { return userRoot(uid).collection("typing").doc("stats"); }
 
+  const OperationType = {
+    CREATE: "create",
+    UPDATE: "update",
+    DELETE: "delete",
+    LIST: "list",
+    GET: "get",
+    WRITE: "write"
+  };
+
+  function handleFirestoreError(error, operationType, path = null) {
+    const user = firebaseUser || (window.firebase?.auth?.()?.currentUser);
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: user?.uid || null,
+        email: user?.email || null,
+        emailVerified: user?.emailVerified ?? null,
+        isAnonymous: user?.isAnonymous ?? null,
+        tenantId: user?.tenantId || null,
+        providerInfo: user?.providerData?.map(provider => ({
+          providerId: provider.providerId,
+          email: provider.email
+        })) || []
+      },
+      operationType,
+      path
+    };
+    console.error("Firestore Error: ", JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
+  }
+
   function vexFirestoreDatabaseId() { return firebaseConfig.firestoreDatabaseId || "(default)"; }
   function vexFirestoreDocumentName(path) {
     return `projects/${firebaseConfig.projectId}/databases/${vexFirestoreDatabaseId()}/documents/${path}`;
@@ -1424,45 +2607,81 @@
     let token = await firebaseUser.getIdToken();
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization:`Bearer ${token}`, "Content-Type":"application/json" } });
-      if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); continue; }
+      if ((response.status === 401 || response.status === 403) && attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+        try { token = await firebaseUser.getIdToken(true); } catch (_) {}
+        continue;
+      }
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error?.message || `Firestore sync failed (${response.status}).`);
+      if (!response.ok) {
+        const errorMsg = payload.error?.message || `Firestore sync failed (${response.status}).`;
+        const err = new Error(errorMsg);
+        err.status = response.status;
+        throw err;
+      }
       return payload;
     }
     throw new Error("Firebase session token could not be refreshed");
   }
   async function firestoreRestList(path, pageSize = 100) {
-    const payload = await firestoreRestRequest(`${vexFirestoreUrl(path)}?pageSize=${pageSize}`);
-    return (payload.documents || []).map(firestoreDocumentToObject);
+    try {
+      const payload = await firestoreRestRequest(`${vexFirestoreUrl(path)}?pageSize=${pageSize}`);
+      return (payload.documents || []).map(firestoreDocumentToObject);
+    } catch (error) {
+      if (String(error?.message || "").toLowerCase().includes("permission")) {
+        console.warn("Firestore list permission pending for path:", path);
+        return []; // Return empty array to keep local workspace available instead of crashing
+      }
+      throw error;
+    }
   }
   async function firestoreRestGet(path) {
-    try { return firestoreDocumentToObject(await firestoreRestRequest(vexFirestoreUrl(path))); }
-    catch (error) { if (String(error.message || "").includes("(404)") || /not found/i.test(error.message || "")) return null; throw error; }
+    try {
+      return firestoreDocumentToObject(await firestoreRestRequest(vexFirestoreUrl(path)));
+    } catch (error) {
+      if (String(error?.message || "").includes("(404)") || /not found/i.test(error?.message || "")) return null;
+      if (String(error?.message || "").toLowerCase().includes("permission")) {
+        console.warn("Firestore get permission pending for path:", path);
+        return null;
+      }
+      throw error;
+    }
   }
   async function firestoreRestBatchWrite(writes) {
     for (let offset = 0; offset < writes.length; offset += 450) {
       const chunk = writes.slice(offset, offset + 450).map(write => write.delete ? { delete:vexFirestoreDocumentName(write.delete) } : { update: { name:vexFirestoreDocumentName(write.path), fields:firestoreFields(write.data) } });
-      const payload = await firestoreRestRequest(vexFirestoreBatchUrl(), { method:"POST", body:JSON.stringify({ writes:chunk }) });
-      const failed = (payload.status || []).find(status => status.code);
-      if (failed) throw new Error(failed.message || `Firestore batch write failed (${failed.code}).`);
+      try {
+        const payload = await firestoreRestRequest(vexFirestoreBatchUrl(), { method:"POST", body:JSON.stringify({ writes:chunk }) });
+        const failed = (payload.status || []).find(status => status.code);
+        if (failed) throw new Error(failed.message || `Firestore batch write failed (${failed.code}).`);
+      } catch (error) {
+        if (String(error?.message || "").toLowerCase().includes("permission")) {
+          console.warn("Firestore write permission pending for path:", writes[offset]?.path || writes[offset]?.delete);
+        }
+        throw error;
+      }
     }
   }
   async function readCompatDefaultUserData(uid) {
-    const [pagesSnap, settingsSnap, boardsSnap, typingSnap] = await Promise.all([
-      userRoot(uid).collection("pages").limit(100).get(),
-      userRoot(uid).collection("settings").doc("preferences").get(),
-      userRoot(uid).collection("boards").limit(50).get(),
-      userTyping(uid).get()
-    ]);
-    const boardDocs = boardsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() }));
-    const itemResults = await Promise.all(boardDocs.map(board => userRoot(uid).collection("boards").doc(board.id).collection("items").limit(500).get()));
-    return {
-      pageDocs:pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })),
-      settingsDoc:settingsSnap.exists ? settingsSnap.data() : null,
-      boardDocs,
-      itemResults:itemResults.map(snapshot => snapshot.docs.map(doc => ({ id:doc.id, ...doc.data() }))),
-      typingDoc:typingSnap.exists ? typingSnap.data() : null
-    };
+    try {
+      const [pagesSnap, settingsSnap, boardsSnap, typingSnap] = await Promise.all([
+        userRoot(uid).collection("pages").limit(100).get().catch(() => null),
+        userRoot(uid).collection("settings").doc("preferences").get().catch(() => null),
+        userRoot(uid).collection("boards").limit(50).get().catch(() => null),
+        userTyping(uid).get().catch(() => null)
+      ]);
+      const boardDocs = (boardsSnap && boardsSnap.docs) ? boardsSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })) : [];
+      const itemResults = await Promise.all(boardDocs.map(board => userRoot(uid).collection("boards").doc(board.id).collection("items").limit(500).get().catch(() => null)));
+      return {
+        pageDocs: (pagesSnap && pagesSnap.docs) ? pagesSnap.docs.map(doc => ({ id:doc.id, ...doc.data() })) : [],
+        settingsDoc: settingsSnap && settingsSnap.exists ? settingsSnap.data() : null,
+        boardDocs,
+        itemResults: itemResults.map(snapshot => (snapshot && snapshot.docs) ? snapshot.docs.map(doc => ({ id:doc.id, ...doc.data() })) : []),
+        typingDoc: typingSnap && typingSnap.exists ? typingSnap.data() : null
+      };
+    } catch (_) {
+      return { pageDocs: [], settingsDoc: null, boardDocs: [], itemResults: [], typingDoc: null };
+    }
   }
 
   function serializableMoodItem(item) {
@@ -1548,6 +2767,8 @@
   async function trySupabaseSync(scopes, versions) {
     if (!supabaseConfig.enabled || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return false;
     await writeSupabaseState(await stateSyncPayload(scopes));
+    deletedPageIds.clear();
+    deletedBoardIds.clear();
     clearSyncedScopes(scopes, versions);
     syncStatus = dirtyScopes.size ? "saving" : "synced";
     updateSyncLabels();
@@ -1560,7 +2781,14 @@
     const requestUserId = user.uid;
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      firebaseDb = firebase.firestore();
+      const dbId = vexFirestoreDatabaseId();
+      try {
+        firebaseDb = (dbId && dbId !== "(default)" && typeof firebase.app().firestore === "function")
+          ? firebase.app().firestore(dbId)
+          : firebase.firestore();
+      } catch (_) {
+        firebaseDb = firebase.firestore();
+      }
       hydratingUserId = requestUserId;
       if (supabaseConfig.enabled) {
         try {
@@ -1599,22 +2827,23 @@
             fallbackItems = fallback.itemResults;
             typingDoc = fallback.typingDoc;
             recoveredDefaultData = true;
-            console.warn("Vex recovered user data from the legacy default Firestore database.");
-          } else if (namedReadError) {
-            throw namedReadError;
+            namedReadError = null;
+            console.warn("Vex recovered user data from the default Firestore database.");
           }
         } catch (fallbackError) {
-          if (namedReadError) throw namedReadError;
-          console.warn("Vex default Firestore recovery skipped:", fallbackError);
+          console.warn("Vex default Firestore recovery check:", fallbackError?.message || fallbackError);
         }
       }
-      let legacyPages = [];
-      try {
-        const legacyFiles = await firestoreRestList("files", 100);
-        legacyPages = legacyFiles.filter(data => data.user_id === requestUserId).map(data => ({ id:`legacy-${data.id}`, title:data.title || data.name || "Recovered note", content:data.content || data.text || "", page_type:data.page_type || "ruled-single", updated_at:data.updated_at || data.updatedAt || data.created_at || "", legacy_file_id:data.id }));
-      } catch (legacyError) {
-        console.warn("Vex legacy file migration skipped:", legacyError);
+      if (namedReadError) {
+        console.warn("Firestore access pending security rules; keeping local workspace available:", namedReadError.message);
+        userHydrated = true;
+        hydratedUserId = requestUserId;
+        syncStatus = "saved locally · cloud rules pending";
+        updateSyncLabels();
+        renderAll();
+        return;
       }
+      let legacyPages = [];
       if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
       const pageById = new Map([...pageDocs, ...legacyPages].map(page => [page.id, page]));
       const allPages = [...pageById.values()].map(page => normalizePage(page, requestUserId)).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
@@ -1657,7 +2886,9 @@
       if (shareRouteId) setTimeout(resolveShareRoute, 0);
       if (recoveredDefaultData) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
       if (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc && !legacyPages.length && !recoveredDefaultData) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
-      if (recoveredDefaultData || legacyPages.length || (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc)) await tryRemoteSync();
+      if (recoveredDefaultData || legacyPages.length || (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc)) {
+        runRemoteSync();
+      }
     } catch (error) {
       if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
       userHydrated = false;
@@ -1666,6 +2897,11 @@
       syncStatus = "offline · retrying";
       console.error("Vex hydration failed", error);
       updateSyncLabels();
+      setTimeout(() => {
+        if (firebaseUser && firebaseUser.uid === requestUserId && !userHydrated && hydrationRequestId === requestId) {
+          hydrateUserData(firebaseUser);
+        }
+      }, 3000);
     }
   }
 
@@ -1715,7 +2951,14 @@
     }
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      firebaseDb = firebase.firestore();
+      const dbId = vexFirestoreDatabaseId();
+      try {
+        firebaseDb = (dbId && dbId !== "(default)" && typeof firebase.app().firestore === "function")
+          ? firebase.app().firestore(dbId)
+          : firebase.firestore();
+      } catch (_) {
+        firebaseDb = firebase.firestore();
+      }
       firebaseStorage = window.firebase.storage ? firebase.storage() : null;
       const uid = firebaseUser.uid;
       const now = new Date().toISOString();
@@ -1745,17 +2988,17 @@
       syncStatus = dirtyScopes.size ? "saving" : "synced"; updateSyncLabels();
     } catch (firebaseError) {
       lastSyncError = firebaseError?.message || "Firestore sync failed";
-      console.error("Vex Firestore sync failed; trying Supabase fallback", firebaseError);
+      console.warn("Vex Firestore sync paused; keeping local state active:", firebaseError?.message || firebaseError);
       if (supabaseConfig.enabled) {
         try {
           if (await trySupabaseSync(scopes, versions)) { syncRetryDelay = 1000; return; }
         } catch (supabaseError) {
           lastSyncError = `${lastSyncError}; ${supabaseError?.message || "Supabase sync failed"}`;
-          console.error("Vex Supabase fallback sync failed", supabaseError);
+          console.warn("Vex Supabase fallback sync failed:", supabaseError?.message || supabaseError);
         }
       }
-      syncRetryDelay = Math.min(15000, Math.round(syncRetryDelay * 1.7));
-      syncStatus = "saved locally · retrying";
+      syncRetryDelay = Math.min(30000, Math.round(syncRetryDelay * 1.7));
+      syncStatus = "saved locally · cloud rules pending";
       updateSyncLabels();
     }
   }

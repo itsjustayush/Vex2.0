@@ -1,33 +1,120 @@
 {
   "entities": {
-    "projects": {
-      "title": "Projects",
-      "description": "User note projects/workspaces",
+    "User": {
+      "title": "User",
+      "description": "User profile metadata and state tracking",
+      "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Project ID" },
-        "user_id": { "type": "string", "description": "Owner user ID" },
-        "title": { "type": "string", "description": "Project title" },
-        "description": { "type": "string", "description": "Project description" },
-        "created_at": { "type": "string", "description": "Creation timestamp" }
+        "uid": { "type": "string", "description": "Firebase Auth user UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "display_name": { "type": "string", "description": "User display name" },
+        "photo_url": { "type": "string", "description": "User profile photo URL" },
+        "last_seen_at": { "type": "string", "description": "ISO timestamp of last activity" },
+        "schema_version": { "type": "number", "description": "Schema format version" }
       },
-      "required": ["id", "user_id", "title"]
+      "required": ["uid"]
     },
-    "files": {
-      "title": "Files",
-      "description": "User notes inside projects",
+    "Page": {
+      "title": "Page",
+      "description": "Markdown document and daily note",
+      "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Note file ID" },
-        "user_id": { "type": "string", "description": "Owner user ID" },
-        "project_id": { "type": "string", "description": "Associated project ID" },
-        "title": { "type": "string", "description": "Note title" },
-        "content": { "type": "string", "description": "Note markdown content" },
-        "folder": { "type": "string", "description": "Folder tag" },
-        "extension": { "type": "string", "description": "File extension e.g. md" },
-        "is_public": { "type": "boolean", "description": "Public share flag" },
-        "created_at": { "type": "string", "description": "Creation timestamp" },
-        "updated_at": { "type": "string", "description": "Last update timestamp" }
+        "id": { "type": "string", "description": "Page document identifier" },
+        "user_id": { "type": "string", "description": "Author UID" },
+        "title": { "type": "string", "description": "Page title" },
+        "content": { "type": "string", "description": "Markdown note content" },
+        "page_type": { "type": "string", "description": "Page ruling style (ruled-single, ruled-double, dotted-light, dotted-dense, blank)" },
+        "updated_at": { "type": "string", "description": "ISO timestamp of last update" },
+        "schema_version": { "type": "number", "description": "Schema format version" }
       },
-      "required": ["id", "user_id", "project_id", "title"]
+      "required": ["id", "title"]
+    },
+    "Board": {
+      "title": "Board",
+      "description": "Spatial moodboard workspace canvas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Board identifier" },
+        "user_id": { "type": "string", "description": "Owner UID" },
+        "title": { "type": "string", "description": "Board title" },
+        "updated_at": { "type": "string", "description": "ISO timestamp of last update" },
+        "item_count": { "type": "number", "description": "Number of spatial items" },
+        "schema_version": { "type": "number", "description": "Schema format version" }
+      },
+      "required": ["id", "title"]
+    },
+    "BoardItem": {
+      "title": "BoardItem",
+      "description": "Spatial item on an infinite board canvas (note, card, image)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Item identifier" },
+        "board_id": { "type": "string", "description": "Parent board identifier" },
+        "user_id": { "type": "string", "description": "Owner UID" },
+        "type": { "type": "string", "description": "Item type: note, image, text" },
+        "x": { "type": "number", "description": "X coordinate in canvas space" },
+        "y": { "type": "number", "description": "Y coordinate in canvas space" },
+        "content": { "type": "string", "description": "Note content or caption" },
+        "color": { "type": "string", "description": "Card background accent color" },
+        "width": { "type": "number", "description": "Width in pixels" },
+        "height": { "type": "number", "description": "Height in pixels" },
+        "src": { "type": "string", "description": "Image URL if type is image" },
+        "updated_at": { "type": "string", "description": "ISO timestamp of last update" },
+        "schema_version": { "type": "number", "description": "Schema format version" }
+      },
+      "required": ["id", "type"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User preferences including theme, audio, and active layout states",
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string", "description": "Active UI theme (light, dark, zen)" },
+        "muted": { "type": "boolean", "description": "Typewriter sound mute flag" },
+        "keyboard_visible": { "type": "boolean", "description": "Tactile virtual keyboard dock visibility" },
+        "active_page_id": { "type": "string", "description": "Currently active page ID" },
+        "active_board_id": { "type": "string", "description": "Currently active board ID" },
+        "updated_at": { "type": "string", "description": "ISO timestamp of last update" },
+        "schema_version": { "type": "number", "description": "Schema format version" }
+      }
+    },
+    "TypingStats": {
+      "title": "TypingStats",
+      "description": "Typing speed, accuracy, and practice statistics",
+      "type": "object",
+      "properties": {
+        "words_typed": { "type": "number", "description": "Total words typed" },
+        "accuracy": { "type": "number", "description": "Overall accuracy percentage" },
+        "wpm": { "type": "number", "description": "Words per minute speed" },
+        "updated_at": { "type": "string", "description": "ISO timestamp of last update" },
+        "schema_version": { "type": "number", "description": "Schema format version" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile and metadata document"
+    },
+    "/users/{userId}/pages/{pageId}": {
+      "schema": "Page",
+      "description": "User pages and notes subcollection"
+    },
+    "/users/{userId}/boards/{boardId}": {
+      "schema": "Board",
+      "description": "User moodboards subcollection"
+    },
+    "/users/{userId}/boards/{boardId}/items/{itemId}": {
+      "schema": "BoardItem",
+      "description": "Spatial items within a moodboard subcollection"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "UserSettings",
+      "description": "User settings subcollection (e.g. preferences doc)"
+    },
+    "/users/{userId}/typing/{typingDoc}": {
+      "schema": "TypingStats",
+      "description": "User typing practice statistics document"
     }
   }
 }
