@@ -1423,11 +1423,19 @@
     if (!firebaseUser) throw new Error("Vex sync requires an authenticated Firebase user.");
     let token = await firebaseUser.getIdToken();
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const response = await fetch(url, { ...options, headers: { ...(options.headers || {}), Authorization:`Bearer ${token}`, "Content-Type":"application/json" } });
-      if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); continue; }
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error?.message || `Firestore sync failed (${response.status}).`);
-      return payload;
+      const databaseUrls = [url];
+      const configuredDatabase = vexFirestoreDatabaseId();
+      if (configuredDatabase !== "(default)") databaseUrls.push(url.replace(`/databases/${encodeURIComponent(configuredDatabase)}/`, "/databases/(default)/"));
+      for (const databaseUrl of databaseUrls) {
+        const response = await fetch(databaseUrl, { ...options, headers: { ...(options.headers || {}), Authorization:`Bearer ${token}`, "Content-Type":"application/json" } });
+        if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); break; }
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (response.status === 403 && databaseUrl !== databaseUrls.at(-1)) continue;
+          throw new Error(payload.error?.message || `Firestore sync failed (${response.status}).`);
+        }
+        return payload;
+      }
     }
     throw new Error("Firebase session token could not be refreshed");
   }
