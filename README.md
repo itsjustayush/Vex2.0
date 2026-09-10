@@ -1,5 +1,8 @@
 # Vex
 
+> [!NOTE]
+> This project was built with the help of AI tools including Claude, Gemini, GitHub Copilot, and Manus. These tools accelerated prototyping, code generation, and iteration, but the architecture, technical decisions, and final review still remain in human hands. AI helps move faster, but it does not replace understanding the system.
+
 > **Created by Ayush Bhattacharya** · [GitHub profile](https://github.com/itsjustayush) · [Vex repository](https://github.com/itsjustayush/Vex2.0) · [info.cometlabs@gmail.com](mailto:info.cometlabs@gmail.com)
 >
 > Vex’s tactile keyboard direction and visual starting point were inspired by [keythm.aayushbharti.in](https://keythm.aayushbharti.in/).

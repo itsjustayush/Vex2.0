@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    {% set site_url = configured_site_url or request.url_root.rstrip('/') %}
+    {% set page_url = site_url + request.path %}
+    <meta name="theme-color" content="#0e0e10" />
+    <meta name="description" content="VexNotes documentation for the Vex writing workspace, keyboard workflows, privacy model, and sync features." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="{{ page_url }}" />
+    <link id="vex-favicon" rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" />
+    <title>VexNotes Docs — Vex Writing Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body class="docs-body">
+    <div class="docs-page">
+      <header class="docs-header">
+        <div class="docs-shell">
+          <a class="docs-brand" href="/" aria-label="Vex home">
+            <span class="docs-brand-mark">V</span>
+            <span>Vex<span class="docs-brand-note">Notes</span></span>
+          </a>
+          <nav class="docs-nav" aria-label="Docs navigation">
+            <a href="#overview">Overview</a>
+            <a href="#workspace">Workspace</a>
+            <a href="#sync">Sync</a>
+            <a href="#privacy">Privacy</a>
+            <a href="#faq">FAQ</a>
+          </nav>
+          <a class="docs-cta" href="/">Open Vex</a>
+        </div>
+      </header>
+
+      <main class="docs-main">
+        <section class="docs-hero docs-shell" id="overview">
+          <div class="docs-hero-copy">
+            <p class="docs-kicker">VexNotes Docs</p>
+            <h1>Write in the quiet. Keep the spark.</h1>
+            <p class="docs-lead">VexNotes is the Markdown-native writing space where notes, ideas, rituals, and moodboards live together without turning the page into a dashboard.</p>
+            <div class="docs-actions">
+              <a class="primary-btn" href="/">Launch workspace</a>
+              <a class="ghost-btn" href="#workspace">See features</a>
+            </div>
+            <ul class="docs-badges" aria-label="Highlights">
+              <li>Markdown-first</li>
+              <li>Keyboard-native</li>
+              <li>Sync-ready</li>
+            </ul>
+          </div>
+          <div class="docs-hero-panel" aria-label="Vex workspace preview">
+            <div class="docs-mini-topbar">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="docs-mini-body">
+              <aside class="docs-mini-sidebar">
+                <div class="docs-mini-pill active">Daily note</div>
+                <div class="docs-mini-pill">Ideas</div>
+                <div class="docs-mini-pill">Reading list</div>
+              </aside>
+              <div class="docs-mini-editor">
+                <div class="docs-mini-heading"># Morning flow</div>
+                <div class="docs-mini-line short"></div>
+                <div class="docs-mini-line"></div>
+                <div class="docs-mini-line medium"></div>
+                <div class="docs-mini-block">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="docs-shell docs-grid" id="workspace">
+          <article class="docs-card feature-card">
+            <span class="docs-card-tag">01</span>
+            <h2>Workspace that stays calm</h2>
+            <p>Vex is designed around a low-noise writing surface: soft surfaces, clear contrast, flexible page styles, and a keyboard-first editor that keeps the focus on the words.</p>
+          </article>
+          <article class="docs-card feature-card">
+            <span class="docs-card-tag">02</span>
+            <h2>Markdown, not friction</h2>
+            <p>Use headings, lists, emphasis, quotes, code, and export flows without drowning in toolbars. The editor is built to feel close to the page, not a cluttered app shell.</p>
+          </article>
+          <article class="docs-card feature-card">
+            <span class="docs-card-tag">03</span>
+            <h2>Momentum through moodboards</h2>
+            <p>Sketch ideas visually with pinned notes, images, and spatial board layouts. When writing and inspiration are side by side, thinking gets easier.</p>
+          </article>
+        </section>
+
+        <section class="docs-shell docs-section" id="sync">
+          <div class="docs-section-heading">
+            <p class="docs-kicker">How it works</p>
+            <h2>Built for focus, ready for your account.</h2>
+          </div>
+          <div class="docs-two-col">
+            <div class="docs-card docs-copy">
+              <h3>Private workspace</h3>
+              <p>Guests can explore the notebook without saving anything. When you sign in, Vex can move the current workspace into a verified user-owned space with Firebase-backed identity and Supabase-backed persistence.</p>
+              <ul>
+                <li>Write in guest mode without storage pressure</li>
+                <li>Sign in with Google or one-time email verification</li>
+                <li>Sync notes, boards, and preferences behind Firebase UID scope</li>
+              </ul>
+            </div>
+            <div class="docs-card docs-copy">
+              <h3>Keyboard flows</h3>
+              <p>Shortcuts keep writing moving. The editor supports quick actions, command entry, search, format helpers, and focus-friendly flows designed for rapid capture.</p>
+              <div class="shortcut-pills">
+                <span><kbd>⌘</kbd> + <kbd>K</kbd></span>
+                <span><kbd>/</kbd> command menu</span>
+                <span><kbd>?</kbd> help</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="docs-shell docs-section" id="privacy">
+          <div class="docs-section-heading">
+            <p class="docs-kicker">Privacy & trust</p>
+            <h2>Clear storage boundaries.</h2>
+          </div>
+          <div class="docs-card docs-policy">
+            <div>
+              <h3>What is saved</h3>
+              <p>Pages, boards, settings, and typing stats can be persisted into the authenticated user graph when the account is enabled. Guest sessions are intentionally not written to durable storage.</p>
+            </div>
+            <div>
+              <h3>What stays server-side</h3>
+              <p>Authentication and OTP challenge handling remain on the server as part of the backend flow. Temporary verification data is stored under server-only challenge records rather than in the browser.</p>
+            </div>
+            <div>
+              <h3>What is public</h3>
+              <p>Branding, docs, product pages, and public metadata are served from the public site root. Private workspace routes and API routes remain excluded from crawl policies.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="docs-shell docs-section" id="faq">
+          <div class="docs-section-heading">
+            <p class="docs-kicker">FAQ</p>
+            <h2>Quick answers.</h2>
+          </div>
+          <div class="docs-faq">
+            <details open>
+              <summary>Is VexNotes a markdown app or a note-taking app?</summary>
+              <p>It is built as a Markdown-first workspace with writing, structure, and inspiration tools side by side. That makes it a writing tool first, not a brittle document manager.</p>
+            </details>
+            <details>
+              <summary>Does it work without sign-in?</summary>
+              <p>Yes. Guests can open the workspace and use the editor in a local in-memory session. Saving and cross-device sync require authentication.</p>
+            </details>
+            <details>
+              <summary>Can I export my writing?</summary>
+              <p>Yes. Export flows include Markdown, plain text, and print-friendly output to help you move work into other tools when needed.</p>
+            </details>
+          </div>
+        </section>
+      </main>
+
+      <footer class="docs-footer docs-shell">
+        <div>
+          <strong>VexNotes</strong>
+          <p>Make room for good thoughts.</p>
+        </div>
+        <div class="docs-footer-links">
+          <a href="/">Open app</a>
+          <a href="/status">Status</a>
+          <a href="/security.txt">Security</a>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

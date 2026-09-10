@@ -16,6 +16,7 @@
     theme: "dark",
     pageType: "ruled-single",
     pageId: "daily-notes",
+    viewMode: "edit",
     muted: false,
     keyboardVisible: true,
     title: "A softer place to think",
@@ -50,6 +51,7 @@
   let mobileInputTarget = "body";
   let typingSession = { exerciseId: "home-row", visibleLength: 0, ready: false, value: "", errors: 0, startedAt: 0, finished: false };
   let typingAnimationTimer = null;
+  let commandState = { open: false, mode: "slash", query: "", index: 0, items: [] };
   let syncStatus = "guest · not saved";
   let lastSyncError = "";
   let firebaseDb = null;
@@ -532,22 +534,79 @@
     });
   }
 
-  function formatPreview(markdown, embedded = false) {
-    let html = escapeHtml(markdown);
-    const h1Replacement = embedded ? '<h2 class="editor-content-heading">$1</h2>' : '<h1>$1</h1>';
-    html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>")
-      .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-      .replace(/^# (.*)$/gm, h1Replacement)
-      .replace(/^> (.*)$/gm, "<blockquote>$1</blockquote>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/__(.+?)__/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/\$([^$\n]+)\$/g, '<span class="math-inline">$1</span>')
-      .replace(/^[-*] (.*)$/gm, "<span class=\"list-line\">• $1</span>")
-      .replace(/\n{2,}/g, "</p><p>")
-      .replace(/\n/g, "<br>");
-    return `<p>${html}</p>`;
+  function extractMarkdownHeadings(markdown = "") {
+    const headings = [];
+    String(markdown).split(/\r?\n/).forEach(line => {
+      const match = line.match(/^(#{1,6})\s+(.*)$/);
+      if (!match) return;
+      const level = match[1].length;
+      const text = match[2].trim().replace(/[\*_`~]+/g, "").replace(/\[\[|\]\]/g, "");
+      if (text) headings.push({ level, text });
+    });
+    return headings;
+  }
+
+  function renderKatexHtml(expression, displayMode = false) {
+    if (!window.katex) return escapeHtml(expression);
+    try {
+      return window.katex.renderToString(expression, { displayMode, throwOnError: false, strict: false });
+    } catch (_) {
+      return escapeHtml(expression);
+    }
+  }
+
+  function renderMarkdownPreview(markdown = "") {
+    const source = String(markdown || "");
+    const placeholders = [];
+    let normalized = source.replace(/\r\n/g, "\n");
+
+    function pushToken(html) {
+      const token = `__VEX_PREVIEW_TOKEN_${placeholders.length}__`;
+      placeholders.push(html);
+      return token;
+    }
+
+    normalized = normalized.replace(/```(?:(\w+))?\n([\s\S]*?)```/g, (_, lang, code) => {
+      const trimmed = code.trim();
+      let html = "";
+      const language = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+      if ((lang || "").toLowerCase() === "mermaid") {
+        html = `<pre class="mermaid-block"><code class="language-mermaid">${escapeHtml(trimmed)}</code></pre>`;
+      } else {
+        html = `<pre class="code-block"><code${language}>${escapeHtml(trimmed)}</code></pre>`;
+      }
+      return pushToken(html);
+    });
+
+    normalized = normalized.replace(/\n{2,}/g, "\n\n");
+    normalized = normalized.replace(/^###\s+(.*)$/gm, "<h3>$1</h3>");
+    normalized = normalized.replace(/^##\s+(.*)$/gm, "<h2>$1</h2>");
+    normalized = normalized.replace(/^#\s+(.*)$/gm, "<h1>$1</h1>");
+    normalized = normalized.replace(/^>\s+(.*)$/gm, "<blockquote>$1</blockquote>");
+    normalized = normalized.replace(/^(?:[-*])\s+\[([ xX])\]\s+(.*)$/gm, (_, checked, text) => `<li class="task-item ${checked.toLowerCase() === "x" ? "done" : ""}"><span class="task-box">${checked.toLowerCase() === "x" ? "✓" : ""}</span><span>${text}</span></li>`);
+    normalized = normalized.replace(/^[-*]\s+(.*)$/gm, "<li>$1</li>");
+    normalized = normalized.replace(/^\d+\.\s+(.*)$/gm, "<li>$1</li>");
+    normalized = normalized.replace(/^(?:\*{3,}|-{3,}|_{3,})\s*$/gm, "<hr />");
+    normalized = normalized.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    normalized = normalized.replace(/__(.+?)__/g, "<strong>$1</strong>");
+    normalized = normalized.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    normalized = normalized.replace(/\[\[(.+?)\]\]/g, (_, label) => `<span class="wiki-link">${escapeHtml(label)}</span>`);
+    normalized = normalized.replace(/\[(.+?)\]\((https?:\/\/[^)]+|\/[^)]+|#[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    normalized = normalized.replace(/`([^`]+)`/g, "<code>$1</code>");
+    normalized = normalized.replace(/\$\$\s*([\s\S]+?)\s*\$\$/g, (_, expression) => renderKatexHtml(expression.trim(), true));
+    normalized = normalized.replace(/\$([^$\n]+)\$/g, (_, expression) => renderKatexHtml(expression.trim(), false));
+    normalized = normalized.replace(/(?:^|\n)(<li.*(?:\n<li.*)*)/g, "<ul>$1</ul>");
+    normalized = normalized.replace(/\|(.+?)\|/g, (_, row) => `<table><tr>${row.split("|").map(cell => `<td>${escapeHtml(cell.trim())}</td>`).join("")}</tr></table>`);
+
+    normalized = normalized.replace(/__VEX_PREVIEW_TOKEN_(\d+)__/g, (_, index) => placeholders[Number(index)] || "");
+    const segments = normalized.split(/\n\n+/).map(block => {
+      const trimmed = block.trim();
+      if (!trimmed) return "";
+      if (/<h[1-6]|<blockquote>|<ul>|<ol>|<pre|<table>|<p>|<li>/.test(trimmed)) return trimmed;
+      return `<p>${trimmed}</p>`;
+    }).filter(Boolean).join("\n");
+
+    return segments;
   }
 
   function editorToMarkdown(editor) {
@@ -658,6 +717,7 @@
         <button class="status status-action" data-action="retry-sync" title="${escapeHtml(lastSyncError || "Retry sync")}"><span class="status-dot"></span><span data-sync-label>${syncStatus}</span></button>
         <button class="icon-btn sound-toggle" data-action="toggle-sound" aria-label="${state.muted ? "Turn sound on" : "Mute keyboard sounds"}" aria-pressed="${state.muted ? "true" : "false"}">${state.muted ? icon("soundOff") : icon("sound")}</button>
         <button class="pill-btn" data-action="cycle-theme"><span class="theme-swatch"></span><span>${state.theme}</span></button>
+        <button class="pill-btn" data-action="open-help">Help</button>
         ${firebaseUser ? `<button class="pill-btn" data-action="sign-out">${escapeHtml(firebaseUser.displayName || firebaseUser.email || "Account")} · sign out</button>` : `<button class="ghost-btn" data-action="open-auth">Sign in</button>`}
         ${mode === "landing" ? `<button class="primary-btn" data-action="open-app">Open Vex ${icon("arrow")}</button>` : `<button class="ghost-btn" data-action="open-landing">Home</button>`}
       </div>
@@ -665,10 +725,13 @@
   }
 
   function renderSidebar() {
+    const outline = extractMarkdownHeadings(state.content || "");
+    const outlineMarkup = outline.length ? outline.map(item => `<button class="outline-item" data-action="jump-heading" data-heading-level="${item.level}" data-heading-text="${escapeHtml(item.text)}">${"#".repeat(item.level)} ${escapeHtml(item.text)}</button>`).join("") : `<div class="outline-empty">No headings yet.</div>`;
     return `<aside class="sidebar"><div class="sidebar-inner">
       <button class="primary-btn new-page" data-action="new-page">${icon("plus")} New page</button>
       <div class="side-section"><p class="side-label">your space</p>
         <button class="side-item ${workspaceTab === "write" && !state.moodboard ? "active" : ""}" data-action="focus-editor"><span class="item-icon">${icon("note")}</span><span>Daily notes</span><small>⌘1</small></button>
+        <button class="side-item" data-action="open-daily-note"><span class="item-icon">✧</span><span>Today note</span><small>D</small></button>
         <button class="side-item ${state.moodboard ? "active" : ""}" data-action="switch-moodboard"><span class="item-icon">${icon("board")}</span><span>Moodboard</span><small>⌘2</small></button>
         <button class="side-item ${workspaceTab === "typing" ? "active" : ""}" data-action="switch-typing"><span class="item-icon">⌁</span><span>Enhance typing</span><small>⌘3</small></button>
         <button class="side-item" data-action="open-pages"><span class="item-icon">${icon("folder")}</span><span>All pages</span><small>${(state.pages?.length || 0) + (state.boards?.length || 0)}</small></button>
@@ -678,6 +741,7 @@
         <button class="side-item" data-action="set-page-type" data-value="dotted-light"><span class="item-icon">⠿</span><span>Dotted · light</span></button>
         <button class="side-item" data-action="set-page-type" data-value="dotted-dense"><span class="item-icon">⠿</span><span>Dotted · dense</span></button>
       </div>
+      <div class="side-section"><p class="side-label">outline</p><div class="outline-list">${outlineMarkup}</div></div>
       <div class="side-note ${firebaseUser ? "side-note-auth" : "side-note-guest"}"><strong>Built with love ♥ by <a href="https://github.com/itsjustayush" target="_blank" rel="noreferrer">Ayush</a></strong>${firebaseUser ? `Your private space is synced for ${escapeHtml(firebaseUser.email || "your account")}.` : "Write and explore freely. Sign in or sign up before leaving to save your pages and sync them across devices."}${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save ↗</button>` : ""}</div>
     </div></aside>`;
   }
@@ -712,7 +776,14 @@
 
   function renderEditor(embedded = false) {
     const touchMode = isTouchLayout();
-    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" ${touchMode ? "readonly inputmode=none" : ""} /><div class="editor-tools"><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>${touchMode ? "Use the Vex keyboard below" : "Today · just now"}</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-content ${touchMode ? "mobile-editor-content" : ""}" contenteditable="${touchMode ? "false" : "true"}" inputmode="none" spellcheck="false" data-placeholder="Start with a sentence, a question, or a tiny spark…">${formatPreview(state.content, embedded)}</div></div>${renderFormatBar()}</section>`;
+    const modeButtons = [
+      { id: "edit", label: "Edit" },
+      { id: "split", label: "Split" },
+      { id: "preview", label: "Preview" }
+    ];
+    const previewMarkup = state.viewMode !== "edit" ? `<div class="preview-pane">${renderMarkdownPreview(state.content)}</div>` : "";
+    const editorMarkup = state.viewMode !== "preview" ? `<div class="editor-pane"><div class="editor-content ${touchMode ? "mobile-editor-content" : ""}" contenteditable="${touchMode ? "false" : "true"}" inputmode="text" spellcheck="false" data-placeholder="Start with a sentence, a question, or a tiny spark…">${escapeHtml(state.content)}</div></div>` : "";
+    return `<section class="editor-stage"><div class="editor-head"><input class="page-title" value="${escapeHtml(state.title)}" aria-label="Page title" ${touchMode ? "readonly inputmode=none" : ""} /><div class="editor-tools"><div class="mode-switcher">${modeButtons.map(item => `<button class="${state.viewMode === item.id ? "active" : ""}" data-action="set-view-mode" data-view-mode="${item.id}">${item.label}</button>`).join("")}</div><button class="pill-btn" data-action="share-note" title="Share note">↗ <span>Share</span></button><button class="pill-btn" data-action="export-page" title="Export note">${icon("download")} <span>Export</span></button></div></div><div class="page-meta"><span>${touchMode ? "Use the Vex keyboard below" : "Today · just now"}</span><div class="page-switcher">${["ruled-single","ruled-double","plain","dotted-light","dotted-dense"].map(type => `<button class="${state.pageType === type ? "active" : ""}" data-action="set-page-type" data-value="${type}">${type.replace("ruled-", "ruled · ").replace("dotted-", "dotted · ")}</button>`).join("")}</div></div><div class="page-card ${pageClass()}"><div class="editor-shell ${state.viewMode === "split" ? "split-view" : ""}">${editorMarkup}${previewMarkup}</div></div>${renderFormatBar()}</section>`;
   }
 
   function renderMoodboard() {
@@ -741,6 +812,200 @@
     host.innerHTML = `<div class="app-shell ${embedded ? "embedded-app" : ""} ${state.keyboardVisible ? "" : "keyboard-hidden"}" data-theme-root><div class="workspace ${embedded ? "" : ""}">${renderSidebar()}${state.moodboard ? renderMoodboard() : renderEditor(embedded)}</div>${renderKeyboard()}</div>`;
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(host);
+  }
+
+  function getSlashCommandItems() {
+    return [
+      { id: "heading-1", label: "Heading 1", value: "# Heading\n\n", search: "heading h1" },
+      { id: "heading-2", label: "Heading 2", value: "## Heading\n\n", search: "heading h2" },
+      { id: "heading-3", label: "Heading 3", value: "### Heading\n\n", search: "heading h3" },
+      { id: "quote", label: "Quote", value: "> Quote\n\n", search: "quote blockquote" },
+      { id: "callout", label: "Callout", value: "> [!note]\n> A useful note\n\n", search: "callout note" },
+      { id: "bullet-list", label: "Bullet list", value: "- First item\n- Second item\n\n", search: "list bullet" },
+      { id: "numbered-list", label: "Numbered list", value: "1. First item\n2. Second item\n\n", search: "list numbered" },
+      { id: "checklist", label: "Checklist", value: "- [ ] Todo item\n- [x] Done item\n\n", search: "task checklist" },
+      { id: "code", label: "Code block", value: "```js\nconsole.log('hello');\n```\n\n", search: "code block javascript js" },
+      { id: "table", label: "Table", value: "| Name | Status |\n| --- | --- |\n| Vex | Active |\n\n", search: "table markdown" },
+      { id: "divider", label: "Divider", value: "---\n\n", search: "divider separator" },
+      { id: "link", label: "Link", value: "[Vex](https://vexnote.vercel.app)\n\n", search: "link url" },
+      { id: "image", label: "Image", value: "![Alt text](https://example.com/image.png)\n\n", search: "image media" },
+      { id: "math", label: "Math block", value: "$$\nE = mc^2\n$$\n\n", search: "math latex equation" },
+      { id: "mermaid", label: "Mermaid", value: "```mermaid\nflowchart TD\n  A --> B\n```\n\n", search: "diagram mermaid" }
+    ];
+  }
+
+  function getAtShortcutItems() {
+    const today = new Date();
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const stamp = value => value.toISOString().slice(0, 10);
+    return [
+      { id: "today", label: "Today", value: `@${stamp(today)}`, search: "today date" },
+      { id: "tomorrow", label: "Tomorrow", value: `@${stamp(tomorrow)}`, search: "tomorrow date" },
+      { id: "daily-note", label: "Daily note", value: `[[Daily/${stamp(today)}]]`, search: "daily note" },
+      { id: "date-picker", label: "Date", value: `@${stamp(today)}`, search: "date picker" }
+    ];
+  }
+
+  function closeCommandMenu() {
+    commandState.open = false;
+    document.querySelectorAll(".command-backdrop, .search-backdrop").forEach(node => node.remove());
+  }
+
+  function insertTextAtEditor(text) {
+    const editor = document.querySelector(".editor-content");
+    if (!editor) return;
+    editor.focus();
+    try {
+      document.execCommand("insertText", false, text);
+    } catch (_) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(text));
+        range.collapse(false);
+      } else {
+        editor.textContent = (editor.textContent || "") + text;
+      }
+    }
+    state.content = editor.textContent || "";
+    persist("page");
+    if (state.viewMode !== "edit") {
+      const preview = document.querySelector(".preview-pane");
+      if (preview) preview.innerHTML = renderMarkdownPreview(state.content);
+    }
+  }
+
+  function renderCommandMenu(mode = "slash") {
+    const items = mode === "slash" ? getSlashCommandItems() : getAtShortcutItems();
+    const query = (commandState.query || "").trim().toLowerCase();
+    const filtered = items.filter(item => !query || `${item.label} ${item.search}`.toLowerCase().includes(query));
+    const menu = document.createElement("div");
+    menu.className = "command-backdrop";
+    const menuMarkup = `
+      <div class="command-menu" role="dialog" aria-label="${mode === "slash" ? "Slash command menu" : "Shortcut menu"}">
+        <div class="command-header">${mode === "slash" ? "Slash commands" : "@ shortcuts"}</div>
+        <input class="command-input" value="${escapeHtml(commandState.query || "")}" aria-label="Command filter" />
+        <div class="command-list">${filtered.length ? filtered.map((item, index) => `<button class="command-item ${index === commandState.index ? "active" : ""}" data-command-id="${item.id}" type="button"><span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.search)}</small></button>`).join("") : `<div class="command-empty">No matching commands</div>`}</div>
+      </div>
+    `;
+    menu.innerHTML = menuMarkup;
+    const input = menu.querySelector(".command-input");
+    const selectionHandler = item => {
+      insertTextAtEditor(item.value);
+      closeCommandMenu();
+    };
+    menu.querySelectorAll(".command-item").forEach((button, index) => {
+      button.addEventListener("click", () => {
+        const selected = filtered[index];
+        if (selected) selectionHandler(selected);
+      });
+    });
+    input.addEventListener("input", event => {
+      commandState.query = event.target.value;
+      commandState.index = 0;
+      const next = renderCommandMenu(mode);
+      const previous = document.querySelector(".command-backdrop");
+      if (previous) previous.replaceWith(next);
+      else document.body.appendChild(next);
+    });
+    input.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); closeCommandMenu(); return; }
+      if (event.key === "ArrowDown") { event.preventDefault(); commandState.index = Math.min(Math.max(filtered.length - 1, 0), commandState.index + 1); const next = renderCommandMenu(mode); const previous = document.querySelector(".command-backdrop"); if (previous) previous.replaceWith(next); else document.body.appendChild(next); }
+      if (event.key === "ArrowUp") { event.preventDefault(); commandState.index = Math.max(0, commandState.index - 1); const next = renderCommandMenu(mode); const previous = document.querySelector(".command-backdrop"); if (previous) previous.replaceWith(next); else document.body.appendChild(next); }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const picked = filtered[commandState.index] || filtered[0];
+        if (picked) selectionHandler(picked);
+      }
+    });
+    menu.addEventListener("click", event => { if (event.target === menu) closeCommandMenu(); });
+    setTimeout(() => input.focus(), 20);
+    return menu;
+  }
+
+  function openSlashMenu() {
+    closeCommandMenu();
+    commandState.open = true;
+    commandState.mode = "slash";
+    commandState.query = "";
+    commandState.index = 0;
+    document.body.appendChild(renderCommandMenu("slash"));
+  }
+
+  function openAtMenu() {
+    closeCommandMenu();
+    commandState.open = true;
+    commandState.mode = "at";
+    commandState.query = "";
+    commandState.index = 0;
+    document.body.appendChild(renderCommandMenu("at"));
+  }
+
+  function openSearchPalette() {
+    closeCommandMenu();
+    const backdrop = document.createElement("div");
+    backdrop.className = "search-backdrop";
+    const entries = state.pages.map(page => ({ id: page.id, title: page.title || "Untitled page", snippet: (page.content || "").replace(/[#*`]/g, " ").slice(0, 120), kind: "note" }));
+    const renderList = query => {
+      const normalized = query.trim().toLowerCase();
+      const filtered = entries.filter(item => !normalized || `${item.title} ${item.snippet}`.toLowerCase().includes(normalized));
+      return filtered.length ? filtered.map(item => `<button class="search-item" data-search-id="${item.id}" type="button"><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.kind)} · ${escapeHtml(item.snippet || "Empty note")}</small></button>`).join("") : `<div class="command-empty">No notes found</div>`;
+    };
+    backdrop.innerHTML = `<div class="search-menu" role="dialog" aria-label="Vault search"><div class="command-header">Vault search</div><input class="command-input" placeholder="Search notes" aria-label="Vault search" /><div class="command-list">${renderList("")}</div></div>`;
+    const input = backdrop.querySelector(".command-input");
+    const list = backdrop.querySelector(".command-list");
+    input.addEventListener("input", event => { list.innerHTML = renderList(event.target.value); list.querySelectorAll(".search-item").forEach(button => button.addEventListener("click", () => { const page = state.pages.find(entry => entry.id === button.dataset.searchId); if (!page) return; state.pageId = page.id; state.title = page.title || "Untitled page"; state.content = page.content || ""; state.pageType = page.page_type || "ruled-single"; state.moodboard = false; workspaceTab = "write"; closeCommandMenu(); renderApp(); })); });
+    list.querySelectorAll(".search-item").forEach(button => button.addEventListener("click", () => { const page = state.pages.find(entry => entry.id === button.dataset.searchId); if (!page) return; state.pageId = page.id; state.title = page.title || "Untitled page"; state.content = page.content || ""; state.pageType = page.page_type || "ruled-single"; state.moodboard = false; workspaceTab = "write"; closeCommandMenu(); renderApp(); }));
+    input.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); closeCommandMenu(); }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const query = input.value.trim();
+        const page = state.pages.find(entry => (entry.title || "").toLowerCase().includes(query.toLowerCase()) || (entry.content || "").toLowerCase().includes(query.toLowerCase()));
+        if (page) {
+          state.pageId = page.id; state.title = page.title || "Untitled page"; state.content = page.content || ""; state.pageType = page.page_type || "ruled-single"; state.moodboard = false; workspaceTab = "write"; closeCommandMenu(); renderApp();
+        }
+      }
+    });
+    backdrop.addEventListener("click", event => { if (event.target === backdrop) closeCommandMenu(); });
+    document.body.appendChild(backdrop);
+    setTimeout(() => input.focus(), 20);
+  }
+
+  function openHelpOverlay() {
+    closeCommandMenu();
+    const backdrop = document.createElement("div");
+    backdrop.className = "help-backdrop";
+    backdrop.innerHTML = `<div class="help-modal" role="dialog" aria-label="Keyboard shortcuts"><div class="command-header">Keyboard shortcuts</div><div class="shortcut-grid"><div class="shortcut-item"><span>Search notes</span><kbd>⌘/Ctrl + P</kbd></div><div class="shortcut-item"><span>Slash menu</span><kbd>/</kbd></div><div class="shortcut-item"><span>At shortcuts</span><kbd>@</kbd></div><div class="shortcut-item"><span>New daily note</span><kbd>D</kbd></div><div class="shortcut-item"><span>Toggle write</span><kbd>⌘/Ctrl + 1</kbd></div><div class="shortcut-item"><span>Toggle moodboard</span><kbd>⌘/Ctrl + 2</kbd></div><div class="shortcut-item"><span>Typing practice</span><kbd>⌘/Ctrl + 3</kbd></div><div class="shortcut-item"><span>Close overlay</span><kbd>Esc</kbd></div></div></div>`;
+    backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.remove(); });
+    document.body.appendChild(backdrop);
+  }
+
+  function openDailyNote() {
+    const date = new Date();
+    const isoDate = date.toISOString().slice(0, 10);
+    const existing = state.pages.find(page => (page.title || "").trim() === isoDate);
+    if (existing) {
+      state.pageId = existing.id;
+      state.title = existing.title || isoDate;
+      state.content = existing.content || "";
+      state.pageType = existing.page_type || "ruled-single";
+      state.moodboard = false;
+      workspaceTab = "write";
+      renderApp();
+      return;
+    }
+    const page = normalizePage({ id: makeEntityId("note"), title: isoDate, content: `# ${isoDate}\n\n- [ ] Capture the day\n- [ ] Note the next step\n\n`, page_type: "ruled-single", updated_at: date.toISOString() }, firebaseUser?.uid);
+    state.pages.unshift(page);
+    state.pageId = page.id;
+    state.title = page.title;
+    state.content = page.content;
+    state.pageType = page.page_type;
+    state.moodboard = false;
+    workspaceTab = "write";
+    persist("page");
+    renderApp();
   }
 
   function renderLanding() {
@@ -787,6 +1052,7 @@
     document.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     document.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     document.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
+    document.querySelectorAll("[data-action='open-help']").forEach(btn => btn.addEventListener("click", () => openHelpOverlay()));
     document.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
   }
 
@@ -799,6 +1065,19 @@
     root.querySelectorAll("[data-action='focus-editor']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; renderApp(); setTimeout(() => document.querySelector(".editor-content")?.focus(), 50); }));
     root.querySelectorAll("[data-action='switch-moodboard']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = true; renderApp(); }));
     root.querySelectorAll("[data-action='switch-typing']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "typing"; state.moodboard = false; resetTypingSession("home-row"); renderApp(); }));
+    root.querySelectorAll("[data-action='set-view-mode']").forEach(btn => btn.addEventListener("click", () => { state.viewMode = btn.dataset.viewMode || "edit"; persist("settings"); renderApp(); setTimeout(() => document.querySelector(".editor-content")?.focus(), 50); }));
+    root.querySelectorAll("[data-action='jump-heading']").forEach(btn => btn.addEventListener("click", () => {
+      const headingText = btn.dataset.headingText || "";
+      const editor = document.querySelector(".editor-content");
+      if (!editor || !headingText) return;
+      const lines = String(state.content || "").split(/\r?\n/);
+      const index = lines.findIndex(line => line.includes(headingText));
+      if (index === -1) return;
+      const target = index * 1.7;
+      const scroll = editor.scrollTop + target;
+      editor.scrollTop = scroll;
+      editor.focus();
+    }));
     root.querySelectorAll("[data-action='reset-typing']").forEach(btn => btn.addEventListener("click", () => { resetTypingSession(typingSession.exerciseId); renderApp(); }));
     root.querySelectorAll("[data-action='select-exercise']").forEach(btn => btn.addEventListener("click", () => { typingSession.exerciseId = btn.dataset.exerciseId; resetTypingSession(btn.dataset.exerciseId); renderApp(); }));
     root.querySelectorAll("[data-action='new-page']").forEach(btn => btn.addEventListener("click", () => { workspaceTab = "write"; state.moodboard = false; const page = normalizePage({ id:makeEntityId("note"), title:"Untitled page", content:"", page_type:"ruled-single", updated_at:new Date().toISOString() }, firebaseUser?.uid); state.pages.unshift(page); state.pageId = page.id; state.title = page.title; state.content = page.content; state.pageType = page.page_type; persist("page"); renderApp(); setTimeout(() => document.querySelector(".page-title")?.focus(), 50); }));
@@ -807,6 +1086,8 @@
     root.querySelectorAll("[data-action='toggle-keyboard']").forEach(btn => btn.addEventListener("click", () => { state.keyboardVisible = !state.keyboardVisible; persist("settings"); renderAll(); showToast(state.keyboardVisible ? "Vex keyboard shown" : "Vex keyboard hidden"); }));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
+    root.querySelectorAll("[data-action='open-help']").forEach(btn => btn.addEventListener("click", () => openHelpOverlay()));
+    root.querySelectorAll("[data-action='open-daily-note']").forEach(btn => btn.addEventListener("click", () => { openDailyNote(); }));
     root.querySelectorAll("[data-action='sign-out']").forEach(btn => btn.addEventListener("click", signOut));
     root.querySelectorAll("[data-action='retry-sync']").forEach(btn => btn.addEventListener("click", () => { if (firebaseUser) { syncStatus = "saving"; updateSyncLabels(); runRemoteSync(); } else showAuthModal(); }));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
@@ -838,8 +1119,27 @@
       editor?.addEventListener("pointerdown", event => { event.preventDefault(); mobileInputTarget="body"; editor.classList.add("mobile-input-active"); });
     }
     if (editor) {
-      editor.addEventListener("input", () => { state.content = editorToMarkdown(editor); persist("page"); });
-      editor.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold"); } });
+      editor.addEventListener("input", () => {
+        const nextValue = editor.textContent || "";
+        state.content = nextValue;
+        persist("page");
+        if (state.viewMode !== "edit") {
+          const preview = document.querySelector(".preview-pane");
+          if (preview) preview.innerHTML = renderMarkdownPreview(state.content);
+        }
+      });
+      editor.addEventListener("keydown", e => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") { e.preventDefault(); applyFormat("bold"); }
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") { e.preventDefault(); openSearchPalette(); return; }
+        if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          openSlashMenu();
+        }
+        if (e.key === "@" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          openAtMenu();
+        }
+      });
     }
     root.querySelectorAll("[data-format]").forEach(btn => btn.addEventListener("click", () => applyFormat(btn.dataset.format)));
     root.querySelectorAll(".key").forEach(key => key.addEventListener("click", () => handleVirtualKey(key)));
@@ -1505,6 +1805,12 @@
     if ((e.metaKey || e.ctrlKey) && e.key === "1") { e.preventDefault(); workspaceTab="write"; state.moodboard=false; renderApp(); }
     if ((e.metaKey || e.ctrlKey) && e.key === "2") { e.preventDefault(); workspaceTab="write"; state.moodboard=true; renderApp(); }
     if ((e.metaKey || e.ctrlKey) && e.key === "3") { e.preventDefault(); workspaceTab="typing"; state.moodboard=false; resetTypingSession("home-row"); renderApp(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") { e.preventDefault(); openSearchPalette(); }
+    const activeTag = document.activeElement && document.activeElement.tagName ? document.activeElement.tagName.toLowerCase() : "";
+    const isEditingTextField = activeTag === "input" || activeTag === "textarea" || document.activeElement?.isContentEditable;
+    if (!isEditingTextField && e.key && e.key.toLowerCase() === "d" && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openDailyNote(); }
+    if (!isEditingTextField && e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openHelpOverlay(); }
+    if (e.key === "Escape") { closeCommandMenu(); }
   });
 
   document.addEventListener("keyup", e => {
