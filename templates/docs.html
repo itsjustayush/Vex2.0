@@ -3,18 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    {% set site_url = configured_site_url or request.url_root.rstrip('/') %}
-    {% set page_url = site_url + request.path %}
     <meta name="theme-color" content="#0e0e10" />
     <meta name="description" content="VexNotes documentation for the Vex writing workspace, keyboard workflows, privacy model, and sync features." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="{{ page_url }}" />
-    <link id="vex-favicon" rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}" />
+    <link rel="canonical" href="https://vexnote.vercel.app/docs" />
+    <link id="vex-favicon" rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
     <title>VexNotes Docs — Vex Writing Workspace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body class="docs-body">
     <div class="docs-page">

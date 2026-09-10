@@ -762,6 +762,14 @@ app.get("/callback", (req: Request, res: Response) => {
 });
 
 app.get(["/", "/dashboard", "/settings", "/docs", "/status"], (req: Request, res: Response) => {
+  if (req.path.replace(/\/$/, "") === "/docs") {
+    const docsPath = path.join(ROOT_DIR, "templates", "docs.html");
+    if (fs.existsSync(docsPath)) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(fs.readFileSync(docsPath, "utf-8"));
+      return;
+    }
+  }
   serveIndexHtml(req, res);
 });
 
@@ -774,6 +782,10 @@ app.get("*", (req: Request, res: Response) => {
   serveIndexHtml(req, res);
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Vex server running on http://0.0.0.0:${PORT}`);
-});
+export default app;
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Vex server running on http://0.0.0.0:${PORT}`);
+  });
+}
