@@ -19,6 +19,8 @@
     viewMode: "split",
     muted: false,
     keyboardVisible: true,
+    fullscreen: false,
+    fullscreenSidebarOpen: false,
     title: "A softer place to think",
     content: "# A softer place to think\n\nIdeas do not arrive in straight lines. Vex gives them room to wander, connect, and become something useful. Read more in [[Networked Thinking]] or track our [[Project Roadmap]].\n\nHere is a foundational paragraph about creative momentum ^spark-concept\n\n## Live Diagramming\n\n```mermaid\nflowchart TD\n  Sparks([Sparks of Intuition]) --> Canvas[Spatial Moodboard]\n  Canvas --> Synthesis[Daily Notes]\n  Synthesis --> Database{Structured Data}\n  Database -->|Table & Board| Ship([Publish ✦])\n```\n\n## Structured Project Database\n\n```csv\nFeature, Status, Priority, Estimate, Owner\nSpatial Moodboard, Done, High, 4h, Design\nLive Diagrams (Mermaid & TikZ), In Progress, Critical, 3h, Visual\nNotion-style Database, In Progress, Critical, 2h, Frontend\nWikilinks & Block Refs, Done, High, 2h, Graph\nTactile Synthesizer, Done, Medium, 3h, Audio\n```\n\nReference our central block using [[Networked Thinking#^spark-concept]].",
     typingStats: { completed: 0, bestWpm: 0, bestAccuracy: 0, lastWpm: 0, lastAccuracy: 0, streak: 0 },
@@ -173,13 +175,27 @@
     let token = await firebaseUser.getIdToken();
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 15000);
       let response;
-      try { response = await fetch("/api/sync/state", { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` }, body:payload ? JSON.stringify(payload) : undefined, signal:controller.signal }); }
-      finally { clearTimeout(timeout); }
-      if (response.status === 401 && attempt === 0) { token = await firebaseUser.getIdToken(true); continue; }
+      try {
+        response = await fetch("/api/sync/state", {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: payload ? JSON.stringify(payload) : undefined,
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (response.status === 401 && attempt === 0) {
+        token = await firebaseUser.getIdToken(true);
+        continue;
+      }
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || `Supabase bridge failed (${response.status}).`);
+      if (!response.ok) throw new Error(data.detail || data.error || `Supabase bridge returned ${response.status}`);
       return data;
     }
     throw new Error("Firebase session token could not be refreshed");
@@ -237,21 +253,13 @@
   }
 
   async function readSupabaseState() {
-    let firstError = null;
-    const transports = supabaseConfig.serverBridge ? [() => supabaseRequest("GET"), () => hydrateSupabaseDirect()] : [() => hydrateSupabaseDirect(), () => supabaseRequest("GET")];
-    for (const transport of transports) {
-      try { return await transport(); } catch (error) { firstError = firstError || error; console.warn("Vex Supabase read transport failed:", error); }
-    }
-    throw new Error(firstError?.message || "Supabase read failed");
+    if (!firebaseUser) return null;
+    return await supabaseRequest("GET");
   }
 
   async function writeSupabaseState(payload) {
-    let firstError = null;
-    const transports = supabaseConfig.serverBridge ? [() => supabaseRequest("PUT", payload), () => syncSupabaseDirect(payload)] : [() => syncSupabaseDirect(payload), () => supabaseRequest("PUT", payload)];
-    for (const transport of transports) {
-      try { return await transport(); } catch (error) { firstError = firstError || error; console.warn("Vex Supabase write transport failed:", error); }
-    }
-    throw new Error(firstError?.message || "Supabase write failed");
+    if (!firebaseUser) return null;
+    return await supabaseRequest("PUT", payload);
   }
 
   function supabasePageRow(page) {
@@ -306,10 +314,14 @@
 
   function icon(name) {
     const icons = {
-      menu:"☰", search:"⌕", plus:"+", folder:"▦", note:"✦", board:"▧", settings:"⚙",
+      menu:'<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+      theme:'<svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3a9 9 0 0 1 0 18V3Z" fill="currentColor"/></svg>',
+      search:"⌕", plus:"+", folder:"▦", note:"✦", board:"▧", settings:"⚙",
       sound:'<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z" fill="currentColor"/><path d="M16 9.2a4 4 0 0 1 0 5.6M18.8 6.4a8 8 0 0 1 0 11.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
       soundOff:'<svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z" fill="currentColor"/><path d="m16 9 5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
       keyboard:'<svg class="keyboard-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 9h1M9 9h1M12.5 9h1M16 9h1M5.5 12h1M9 12h1M12.5 12h1M16 12h1M7 15h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+      maximize:'<svg class="fullscreen-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      minimize:'<svg class="fullscreen-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       arrow:"↗", download:"↓", close:"×", bold:"B", italic:"I", code:"<>"
     };
     return icons[name] || name;
@@ -1206,6 +1218,9 @@
     state.pageType = page.page_type || "ruled-single";
     state.moodboard = false;
     workspaceTab = "write";
+    if (state.fullscreen) {
+      state.fullscreenSidebarOpen = false;
+    }
     persist("page");
     renderApp();
     if (blockRef) {
@@ -1795,20 +1810,73 @@
   function renderSidebar() {
     const outline = extractMarkdownHeadings(state.content || "");
     const outlineMarkup = outline.length ? outline.map(item => `<button class="outline-item" data-action="jump-heading" data-heading-level="${item.level}" data-heading-text="${escapeHtml(item.text)}">${"#".repeat(item.level)} ${escapeHtml(item.text)}</button>`).join("") : `<div class="outline-empty">No headings yet.</div>`;
+    const totalPages = state.pages?.length || 0;
+    const totalBoards = state.boards?.length || 0;
+
     return `<aside class="sidebar"><div class="sidebar-inner">
       <button class="primary-btn new-page" data-action="new-page">${icon("plus")} New page</button>
-      <div class="side-section"><p class="side-label">your space</p>
-        <button class="side-item ${workspaceTab === "write" && !state.moodboard ? "active" : ""}" data-action="focus-editor"><span class="item-icon">${icon("note")}</span><span>Daily notes</span><small>⌘1</small></button>
-        <button class="side-item" data-action="open-daily-note"><span class="item-icon">✧</span><span>Today note</span><small>D</small></button>
-        <button class="side-item ${state.moodboard ? "active" : ""}" data-action="switch-moodboard"><span class="item-icon">${icon("board")}</span><span>Moodboard</span><small>⌘2</small></button>
-        <button class="side-item ${workspaceTab === "typing" ? "active" : ""}" data-action="switch-typing"><span class="item-icon">⌁</span><span>Enhance typing</span><small>⌘3</small></button>
-        <button class="side-item" data-action="open-pages"><span class="item-icon">${icon("folder")}</span><span>All pages</span><small>${(state.pages?.length || 0) + (state.boards?.length || 0)}</small></button>
+
+      <div class="side-section">
+        <p class="side-label">your space</p>
+        <button class="side-item ${workspaceTab === "write" && !state.moodboard ? "active" : ""}" data-action="focus-editor">
+          <span class="item-icon">${icon("note")}</span>
+          <span>Editor</span>
+          <small>⌘1</small>
+        </button>
+        <button class="side-item" data-action="open-daily-note">
+          <span class="item-icon">✧</span>
+          <span>Today note</span>
+          <small>D</small>
+        </button>
+        <button class="side-item side-item-moodboard ${state.moodboard ? "active" : ""}" data-action="switch-moodboard">
+          <span class="item-icon board-icon">${icon("board")}</span>
+          <span>Moodboard</span>
+          <small>⌘2</small>
+        </button>
+        <button class="side-item ${workspaceTab === "typing" ? "active" : ""}" data-action="switch-typing">
+          <span class="item-icon">⌁</span>
+          <span>Enhance typing</span>
+          <small>⌘3</small>
+        </button>
+        <button class="side-item side-item-all-pages" data-action="open-pages">
+          <span class="item-icon">${icon("folder")}</span>
+          <span>All pages</span>
+          <span class="side-item-badge">${totalPages + totalBoards}</span>
+        </button>
       </div>
-      <div class="side-section"><p class="side-label">page style</p>
-        <button class="side-item" data-action="set-page-type" data-value="plain"><span class="item-icon">—</span><span>Plain page</span></button>
-        <button class="side-item" data-action="set-page-type" data-value="dotted-light"><span class="item-icon">⠿</span><span>Dotted · light</span></button>
-        <button class="side-item" data-action="set-page-type" data-value="dotted-dense"><span class="item-icon">⠿</span><span>Dotted · dense</span></button>
+
+      <div class="side-section">
+        <div class="side-section-header">
+          <p class="side-label">your notes (${totalPages})</p>
+          <button class="side-add-btn" data-action="new-page" title="New note" aria-label="Create new note">+</button>
+        </div>
+        <div class="side-notes-list">
+          ${(state.pages || []).slice(0, 6).map(page => `
+            <button class="side-item side-note-item ${page.id === state.pageId && workspaceTab === "write" && !state.moodboard ? "active" : ""}" data-action="open-sidebar-page" data-page-id="${page.id}" title="${escapeHtml(page.title || "Untitled page")}">
+              <span class="item-icon">${icon("note")}</span>
+              <span class="side-item-title">${escapeHtml(page.title || "Untitled page")}</span>
+            </button>
+          `).join("")}
+          ${totalPages > 6 ? `<button class="side-item-more" data-action="open-pages">All ${totalPages} notes →</button>` : ""}
+        </div>
       </div>
+
+      <div class="side-section">
+        <div class="side-section-header">
+          <p class="side-label">your boards (${totalBoards})</p>
+          <button class="side-add-btn" data-action="new-board" title="New moodboard" aria-label="Create new moodboard">+</button>
+        </div>
+        <div class="side-boards-list">
+          ${(state.boards || []).slice(0, 4).map(board => `
+            <button class="side-item side-board-item ${board.id === state.activeBoardId && state.moodboard ? "active" : ""}" data-action="open-sidebar-board" data-board-id="${board.id}" title="${escapeHtml(board.title || "Moodboard")}">
+              <span class="item-icon board-icon">${icon("board")}</span>
+              <span class="side-item-title">${escapeHtml(board.title || "Moodboard")}</span>
+              <small>${(state.boardItems[board.id] || []).length || board.item_count || 0}</small>
+            </button>
+          `).join("")}
+        </div>
+      </div>
+
       <div class="side-section"><p class="side-label">outline</p><div class="outline-list">${outlineMarkup}</div></div>
       <div class="side-note ${firebaseUser ? "side-note-auth" : "side-note-guest"}"><strong>Built with love ♥ by <a href="https://github.com/itsjustayush" target="_blank" rel="noreferrer">Ayush</a></strong>${firebaseUser ? `Your private space is synced for ${escapeHtml(firebaseUser.email || "your account")}.` : "Write and explore freely. Sign in or sign up before leaving to save your pages and sync them across devices."}${!firebaseUser ? `<button class="side-signin" data-action="open-auth">Sign in to save ↗</button>` : ""}</div>
     </div></aside>`;
@@ -1833,8 +1901,9 @@
 
   function renderKeyboard() {
     const keyboardLabel = state.keyboardVisible ? "Hide Vex keyboard" : "Show Vex keyboard";
+    const fullscreenLabel = state.fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen focus mode";
     const showFormatting = state.keyboardVisible && workspaceTab === "write" && !state.moodboard;
-    return `<button class="keyboard-toggle ${state.keyboardVisible ? "active" : ""}" data-action="toggle-keyboard" aria-label="${keyboardLabel}" aria-expanded="${state.keyboardVisible ? "true" : "false"}" title="${keyboardLabel}">${icon("keyboard")}</button><div class="keyboard-dock ${state.keyboardVisible ? "" : "is-hidden"}" aria-hidden="${state.keyboardVisible ? "false" : "true"}"><div class="keyboard-shell"><div class="keyboard-top"><div class="keyboard-top-brand"><span>vex / soft press</span></div>${showFormatting ? renderFormatBar("in-keyboard") : ""}<div class="keyboard-top-status"><button class="sound-chip" data-action="toggle-sound" title="${state.muted ? "Sound muted — click to turn on" : "Sound on — click to mute"}" aria-label="Toggle keyboard sound"><span class="sound-dot ${state.muted ? "muted" : "active"}">●</span><span>${state.muted ? "sound off" : "sound on"}</span></button></div></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
+    return `<button class="fullscreen-toggle ${state.fullscreen ? "active" : ""}" data-action="toggle-fullscreen" aria-label="${fullscreenLabel}" aria-pressed="${state.fullscreen ? "true" : "false"}" title="${fullscreenLabel}">${state.fullscreen ? icon("minimize") : icon("maximize")}</button><button class="keyboard-toggle ${state.keyboardVisible ? "active" : ""}" data-action="toggle-keyboard" aria-label="${keyboardLabel}" aria-expanded="${state.keyboardVisible ? "true" : "false"}" title="${keyboardLabel}">${icon("keyboard")}</button><div class="keyboard-dock ${state.keyboardVisible ? "" : "is-hidden"}" aria-hidden="${state.keyboardVisible ? "false" : "true"}"><div class="keyboard-shell"><div class="keyboard-top"><div class="keyboard-top-brand"><span>vex / soft press</span></div>${showFormatting ? renderFormatBar("in-keyboard") : ""}<div class="keyboard-top-status"><button class="sound-chip" data-action="toggle-sound" title="${state.muted ? "Sound muted — click to turn on" : "Sound on — click to mute"}" aria-label="Toggle keyboard sound"><span class="sound-dot ${state.muted ? "muted" : "active"}">●</span><span>${state.muted ? "sound off" : "sound on"}</span></button></div></div>${rows.map((row, rowIndex) => `<div class="key-row">${row.map((key, keyIndex) => `<button class="key ${key === "space" ? "space" : ""} ${["tab","caps","shift","ctrl","alt","fn","⌫","↵"].includes(key) ? "wide-1" : ""}" data-key="${escapeHtml(key)}" data-code="${keyCodeFor(key, rowIndex, keyIndex)}">${escapeHtml(key)}</button>`).join("")}</div>`).join("")}</div></div>`;
   }
 
   function renderFormatBar(variant = "default") {
@@ -1880,8 +1949,22 @@
     return `<article class="mood-image ${selected}" data-mood-id="${item.id}" data-action="select-mood-item" tabindex="0" style="left:${item.x}px;top:${item.y}px"><img src="${item.src}" alt="${escapeHtml(item.name || "uploaded image")}" /><small>${escapeHtml(item.name || "moodboard media")}</small></article>`;
   }
 
+  function renderFullscreenControls() {
+    return `<div class="fullscreen-top-controls" aria-label="Fullscreen navigation">
+      <button class="fullscreen-top-btn fullscreen-sidebar-btn ${state.fullscreenSidebarOpen ? "active" : ""}" data-action="toggle-fullscreen-sidebar" aria-label="${state.fullscreenSidebarOpen ? "Close sidebar" : "Open sidebar"}" aria-expanded="${state.fullscreenSidebarOpen ? "true" : "false"}" title="${state.fullscreenSidebarOpen ? "Close sidebar" : "Open sidebar"}">
+        ${icon("menu")}
+      </button>
+      <button class="fullscreen-top-btn fullscreen-theme-btn" data-action="cycle-theme" aria-label="Switch theme (${state.theme})" title="Theme: ${state.theme} (click to switch)">
+        ${icon("theme")}
+        <span class="theme-swatch-dot" data-theme-indicator></span>
+      </button>
+    </div>
+    <div class="fullscreen-sidebar-backdrop" data-action="close-fullscreen-sidebar" aria-label="Close sidebar" role="button" tabindex="0"></div>`;
+  }
+
   function mountWorkspace(host, { embedded = false } = {}) {
-    host.innerHTML = `<div class="app-shell ${embedded ? "embedded-app" : ""} ${state.keyboardVisible ? "" : "keyboard-hidden"}" data-theme-root><div class="workspace ${embedded ? "" : ""}">${renderSidebar()}${state.moodboard ? renderMoodboard() : renderEditor(embedded)}</div>${renderKeyboard()}</div>`;
+    const fullscreenOpenClasses = state.fullscreen && state.fullscreenSidebarOpen ? "fullscreen-sidebar-open sidebar-open" : "";
+    host.innerHTML = `<div class="app-shell ${embedded ? "embedded-app" : ""} ${state.keyboardVisible ? "" : "keyboard-hidden"} ${state.fullscreen ? "fullscreen-focus" : ""} ${fullscreenOpenClasses}" data-theme-root>${renderFullscreenControls()}<div class="workspace ${embedded ? "" : ""}">${renderSidebar()}${state.moodboard ? renderMoodboard() : renderEditor(embedded)}</div>${renderKeyboard()}</div>`;
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(host);
   }
@@ -2094,7 +2177,8 @@
 
   function renderApp() {
     const mainView = workspaceTab === "typing" ? renderTyping() : state.moodboard ? renderMoodboard() : renderEditor();
-    document.getElementById("app").innerHTML = `<div class="app-shell ${state.keyboardVisible ? "" : "keyboard-hidden"}"><div>${renderTopbar("workspace")}</div><div class="workspace">${renderSidebar()}${mainView}</div>${renderKeyboard()}</div>`;
+    const fullscreenOpenClasses = state.fullscreen && state.fullscreenSidebarOpen ? "fullscreen-sidebar-open sidebar-open" : "";
+    document.getElementById("app").innerHTML = `<div class="app-shell ${state.keyboardVisible ? "" : "keyboard-hidden"} ${state.fullscreen ? "fullscreen-focus" : ""} ${fullscreenOpenClasses}"><div>${renderTopbar("workspace")}</div>${renderFullscreenControls()}<div class="workspace">${renderSidebar()}${mainView}</div>${renderKeyboard()}</div>`;
     document.documentElement.dataset.theme = state.theme;
     wireWorkspace(document.getElementById("app"));
     if (workspaceTab === "typing" && !typingSession.ready) resetTypingSession(typingSession.exerciseId);
@@ -2141,41 +2225,177 @@
     document.querySelector(".history-backdrop")?.remove();
     const backdrop = document.createElement("div");
     backdrop.className = "history-backdrop";
-    const pageRows = state.pages.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(page => `
-      <div class="history-row-wrap" style="display:flex;align-items:center;width:100%;gap:8px;">
-        <button class="history-row" data-history-page="${page.id}" style="flex:1;">
-          <span class="history-icon">${icon("note")}</span>
-          <span><strong>${escapeHtml(page.title || "Untitled page")}</strong><small>${escapeHtml((page.content || "").replace(/[#*`\n]/g, " ").slice(0, 88) || "Empty page")}</small></span>
-          <time>${page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "starter"}</time>
-        </button>
-        ${state.pages.length > 1 ? `<button class="ghost-btn" data-delete-page="${page.id}" title="Delete page" style="padding:6px 10px;font-size:12px;opacity:0.6;" type="button">✕</button>` : ""}
-      </div>
-    `).join("");
-    const boardRows = state.boards.slice().sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).map(board => `
-      <div class="history-row-wrap" style="display:flex;align-items:center;width:100%;gap:8px;">
-        <button class="history-row" data-history-board="${board.id}" style="flex:1;">
-          <span class="history-icon board-icon">${icon("board")}</span>
-          <span><strong>${escapeHtml(board.title || "Untitled board")}</strong><small>${board.item_count || 0} pieces on the canvas</small></span>
-          <time>${board.updated_at ? new Date(board.updated_at).toLocaleDateString() : "starter"}</time>
-        </button>
-        ${state.boards.length > 1 ? `<button class="ghost-btn" data-delete-board="${board.id}" title="Delete board" style="padding:6px 10px;font-size:12px;opacity:0.6;" type="button">✕</button>` : ""}
-      </div>
-    `).join("");
-    backdrop.innerHTML = `<div class="history-modal"><button class="auth-close" data-action="close-history" aria-label="Close history">×</button><span class="eyebrow"><b>✦</b> your archive</span><h2>Past activity</h2><p class="history-subtitle">Your notes and moodboards, kept private to this account.</p><p class="side-label">notes</p><div class="history-list">${pageRows || `<div class="history-empty">No saved notes yet.</div>`}</div><p class="side-label">moodboards</p><div class="history-list">${boardRows || `<div class="history-empty">No saved moodboards yet.</div>`}</div></div>`;
+
+    function renderModalContent(filterText = "") {
+      const q = filterText.toLowerCase().trim();
+      const filteredPages = state.pages
+        .slice()
+        .sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+        .filter(p => !q || (p.title || "").toLowerCase().includes(q) || (p.content || "").toLowerCase().includes(q));
+
+      const filteredBoards = state.boards
+        .slice()
+        .sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+        .filter(b => !q || (b.title || "").toLowerCase().includes(q));
+
+      const pageRows = filteredPages.map(page => `
+        <div class="history-row-wrap" style="display:flex;align-items:center;width:100%;gap:8px;">
+          <button class="history-row" data-history-page="${page.id}" style="flex:1;">
+            <span class="history-icon">${icon("note")}</span>
+            <span><strong>${escapeHtml(page.title || "Untitled page")}</strong><small>${escapeHtml((page.content || "").replace(/[#*`\n]/g, " ").slice(0, 88) || "Empty page")}</small></span>
+            <time>${page.updated_at ? new Date(page.updated_at).toLocaleDateString() : "recent"}</time>
+          </button>
+          ${state.pages.length > 1 ? `<button class="ghost-btn" data-delete-page="${page.id}" title="Delete page" style="padding:6px 10px;font-size:12px;opacity:0.6;" type="button">✕</button>` : ""}
+        </div>
+      `).join("");
+
+      const boardRows = filteredBoards.map(board => `
+        <div class="history-row-wrap" style="display:flex;align-items:center;width:100%;gap:8px;">
+          <button class="history-row" data-history-board="${board.id}" style="flex:1;">
+            <span class="history-icon board-icon">${icon("board")}</span>
+            <span><strong>${escapeHtml(board.title || "Untitled board")}</strong><small>${(state.boardItems[board.id] || []).length || board.item_count || 0} pieces on the canvas</small></span>
+            <time>${board.updated_at ? new Date(board.updated_at).toLocaleDateString() : "recent"}</time>
+          </button>
+          ${state.boards.length > 1 ? `<button class="ghost-btn" data-delete-board="${board.id}" title="Delete board" style="padding:6px 10px;font-size:12px;opacity:0.6;" type="button">✕</button>` : ""}
+        </div>
+      `).join("");
+
+      return `
+        <div class="history-modal">
+          <button class="auth-close" data-action="close-history" aria-label="Close archive">×</button>
+          <span class="eyebrow"><b>✦</b> your archive</span>
+          <h2>Past activity</h2>
+          <p class="history-subtitle">Your notes and moodboards, kept strictly private and synced to your account.</p>
+          <input type="text" class="history-search-input" placeholder="Search notes and moodboards…" value="${escapeHtml(filterText)}" aria-label="Search archive" autofocus />
+          <p class="side-label">notes (${filteredPages.length})</p>
+          <div class="history-list">${pageRows || `<div class="history-empty">${q ? "No matching notes found." : "No saved notes yet."}</div>`}</div>
+          <p class="side-label">moodboards (${filteredBoards.length})</p>
+          <div class="history-list">${boardRows || `<div class="history-empty">${q ? "No matching moodboards found." : "No saved moodboards yet."}</div>`}</div>
+        </div>
+      `;
+    }
+
+    function wireModalEvents() {
+      const searchInput = backdrop.querySelector(".history-search-input");
+      if (searchInput) {
+        searchInput.addEventListener("input", (e) => {
+          const val = e.target.value;
+          const pos = e.target.selectionStart;
+          backdrop.innerHTML = renderModalContent(val);
+          wireModalEvents();
+          const nextInput = backdrop.querySelector(".history-search-input");
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.setSelectionRange(pos, pos);
+          }
+        });
+      }
+      backdrop.querySelectorAll("[data-history-page]").forEach(button => button.addEventListener("click", () => {
+        const page = state.pages.find(item => item.id === button.dataset.historyPage);
+        if (!page) return;
+        state.pageId = page.id;
+        state.title = page.title || "Untitled page";
+        state.content = page.content || "";
+        state.pageType = page.page_type || "ruled-single";
+        state.moodboard = false;
+        workspaceTab = "write";
+        backdrop.remove();
+        renderApp();
+      }));
+      backdrop.querySelectorAll("[data-history-board]").forEach(button => button.addEventListener("click", () => {
+        setActiveBoard(button.dataset.historyBoard);
+        state.moodboard = true;
+        workspaceTab = "write";
+        backdrop.remove();
+        renderApp();
+      }));
+      backdrop.querySelectorAll("[data-delete-page]").forEach(button => button.addEventListener("click", event => {
+        event.stopPropagation();
+        deletePage(button.dataset.deletePage);
+        backdrop.remove();
+        showPagesModal();
+      }));
+      backdrop.querySelectorAll("[data-delete-board]").forEach(button => button.addEventListener("click", event => {
+        event.stopPropagation();
+        deleteBoard(button.dataset.deleteBoard);
+        backdrop.remove();
+        showPagesModal();
+      }));
+    }
+
+    backdrop.innerHTML = renderModalContent("");
     document.body.appendChild(backdrop);
-    backdrop.addEventListener("click", event => { if (event.target === backdrop || event.target.closest("[data-action='close-history']")) backdrop.remove(); });
-    backdrop.querySelectorAll("[data-history-page]").forEach(button => button.addEventListener("click", () => { const page = state.pages.find(item => item.id === button.dataset.historyPage); if (!page) return; state.pageId=page.id; state.title=page.title || "Untitled page"; state.content=page.content || ""; state.pageType=page.page_type || "ruled-single"; state.moodboard=false; workspaceTab="write"; backdrop.remove(); renderApp(); }));
-    backdrop.querySelectorAll("[data-history-board]").forEach(button => button.addEventListener("click", () => { setActiveBoard(button.dataset.historyBoard); state.moodboard=true; workspaceTab="write"; backdrop.remove(); renderApp(); }));
-    backdrop.querySelectorAll("[data-delete-page]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); deletePage(button.dataset.deletePage); backdrop.remove(); showPagesModal(); }));
-    backdrop.querySelectorAll("[data-delete-board]").forEach(button => button.addEventListener("click", event => { event.stopPropagation(); deleteBoard(button.dataset.deleteBoard); backdrop.remove(); showPagesModal(); }));
+    wireModalEvents();
+    backdrop.addEventListener("click", event => {
+      if (event.target === backdrop || event.target.closest("[data-action='close-history']")) {
+        backdrop.remove();
+      }
+    });
   }
 
   function renderAll() { activeView === "landing" ? renderLanding() : renderApp(); }
 
   function openView(view) {
     activeView = view;
+    if (view === "landing") {
+      state.fullscreen = false;
+      state.fullscreenSidebarOpen = false;
+    }
     window.location.hash = view === "app" ? "app" : "";
     renderAll();
+  }
+
+  function toggleFullscreenSidebar() {
+    state.fullscreenSidebarOpen = !state.fullscreenSidebarOpen;
+    const appShell = document.querySelector(".app-shell");
+    const sidebarBtn = document.querySelector(".fullscreen-sidebar-btn");
+    if (appShell) {
+      appShell.classList.toggle("fullscreen-sidebar-open", !!state.fullscreenSidebarOpen);
+      appShell.classList.toggle("sidebar-open", !!state.fullscreenSidebarOpen);
+    }
+    if (sidebarBtn) {
+      sidebarBtn.classList.toggle("active", !!state.fullscreenSidebarOpen);
+      sidebarBtn.setAttribute("aria-expanded", state.fullscreenSidebarOpen ? "true" : "false");
+      sidebarBtn.title = state.fullscreenSidebarOpen ? "Close sidebar" : "Open sidebar";
+    }
+  }
+
+  function closeFullscreenSidebar() {
+    if (!state.fullscreenSidebarOpen) return;
+    state.fullscreenSidebarOpen = false;
+    const appShell = document.querySelector(".app-shell");
+    const sidebarBtn = document.querySelector(".fullscreen-sidebar-btn");
+    if (appShell) {
+      appShell.classList.remove("fullscreen-sidebar-open");
+      appShell.classList.remove("sidebar-open");
+    }
+    if (sidebarBtn) {
+      sidebarBtn.classList.remove("active");
+      sidebarBtn.setAttribute("aria-expanded", "false");
+      sidebarBtn.title = "Open sidebar";
+    }
+  }
+
+  function toggleFullscreenMode() {
+    state.fullscreen = !state.fullscreen;
+    if (!state.fullscreen) {
+      state.fullscreenSidebarOpen = false;
+    }
+    renderAll();
+    showToast(state.fullscreen ? "Fullscreen focus mode on" : "Fullscreen focus mode off");
+    if (state.fullscreen) {
+      try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } catch (_) {}
+    } else {
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } catch (_) {}
+    }
   }
 
   function wireGlobal() {
@@ -2216,6 +2436,9 @@
     root.querySelectorAll("[data-action='set-page-type']").forEach(btn => btn.addEventListener("click", () => { state.pageType = btn.dataset.value; persist("page"); renderAll(); }));
     root.querySelectorAll("[data-action='toggle-sound']").forEach(btn => btn.addEventListener("click", () => { state.muted = !state.muted; persist("settings"); renderAll(); showToast(state.muted ? "Sound muted" : "Sound on"); }));
     root.querySelectorAll("[data-action='toggle-keyboard']").forEach(btn => btn.addEventListener("click", () => { state.keyboardVisible = !state.keyboardVisible; persist("settings"); renderAll(); showToast(state.keyboardVisible ? "Vex keyboard shown" : "Vex keyboard hidden"); }));
+    root.querySelectorAll("[data-action='toggle-fullscreen']").forEach(btn => btn.addEventListener("click", toggleFullscreenMode));
+    root.querySelectorAll("[data-action='toggle-fullscreen-sidebar']").forEach(btn => btn.addEventListener("click", toggleFullscreenSidebar));
+    root.querySelectorAll("[data-action='close-fullscreen-sidebar']").forEach(btn => btn.addEventListener("click", closeFullscreenSidebar));
     root.querySelectorAll("[data-action='cycle-theme']").forEach(btn => btn.addEventListener("click", () => setTheme(state.theme === "light" ? "dark" : state.theme === "dark" ? "zen" : "light")));
     root.querySelectorAll("[data-action='open-auth']").forEach(btn => btn.addEventListener("click", () => showAuthModal()));
     root.querySelectorAll("[data-action='open-help']").forEach(btn => btn.addEventListener("click", () => openHelpOverlay()));
@@ -2224,6 +2447,15 @@
     root.querySelectorAll("[data-action='retry-sync']").forEach(btn => btn.addEventListener("click", () => { if (firebaseUser) { syncStatus = "saving"; updateSyncLabels(); runRemoteSync(); } else showAuthModal(); }));
     root.querySelectorAll("[data-action='coming-soon']").forEach(btn => btn.addEventListener("click", () => showToast("More spaces are coming soon")));
     root.querySelectorAll("[data-action='open-pages']").forEach(btn => btn.addEventListener("click", showPagesModal));
+    root.querySelectorAll("[data-action='open-sidebar-page']").forEach(btn => btn.addEventListener("click", () => {
+      openPage(btn.dataset.pageId);
+    }));
+    root.querySelectorAll("[data-action='open-sidebar-board']").forEach(btn => btn.addEventListener("click", () => {
+      setActiveBoard(btn.dataset.boardId);
+      state.moodboard = true;
+      workspaceTab = "write";
+      renderApp();
+    }));
     root.querySelectorAll("[data-action='new-board']").forEach(btn => btn.addEventListener("click", () => { ensureWorkspaceHistory(); const board = normalizeBoard({ id:makeEntityId("board"), title:"New moodboard", item_count:0, updated_at:new Date().toISOString() }, firebaseUser?.uid); state.boards.unshift(board); state.boardItems[board.id]=[]; setActiveBoard(board.id); state.moodboard=true; workspaceTab="write"; persist("board"); renderApp(); showToast("New moodboard created"); }));
     root.querySelectorAll("[data-action='select-board']").forEach(btn => btn.addEventListener("click", () => { setActiveBoard(btn.dataset.boardId); state.moodboard=true; persist("settings"); renderApp(); }));
     root.querySelectorAll("[data-action='zoom-board']").forEach(btn => btn.addEventListener("click", () => { const action=btn.dataset.zoom; if (action === "in") state.boardZoom=Math.min(2.5, state.boardZoom + .1); if (action === "out") state.boardZoom=Math.max(.45, state.boardZoom - .1); if (action === "reset") { state.boardZoom=1; state.boardPan={x:0,y:0}; } renderApp(); }));
@@ -2705,59 +2937,166 @@
     return safe;
   }
 
-  async function hydrateSupabaseUserData(user, requestId, requestUserId) {
-    const data = await readSupabaseState();
-    if (!data?.enabled || requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return false;
-    const pages = Array.isArray(data.pages) ? data.pages.map(page => normalizePage(page, requestUserId)) : [];
-    const rawBoards = Array.isArray(data.boards) ? data.boards : [];
-    const boards = rawBoards.map(board => normalizeBoard(board, requestUserId));
-    const boardIdMap = new Map(rawBoards.map((board, index) => [String(board.id), boards[index].id]));
-    const rows = Array.isArray(data.items) ? data.items : [];
-    const settings = data.settings && typeof data.settings === "object" ? data.settings : {};
-    state.pages = pages.length ? pages : cloneState(defaultState).pages;
-    state.boards = boards.length ? boards : cloneState(defaultState).boards;
-    state.boardItems = {};
-    remoteBoardItemIds = {};
-    state.boards.forEach(board => { state.boardItems[board.id] = []; remoteBoardItemIds[board.id] = []; });
-    rows.forEach(row => {
-      const item = row.payload && typeof row.payload === "object" ? { ...row.payload, id:row.id, type:row.item_type || row.payload.type || "note" } : { id:row.id, type:row.item_type || "note" };
-      const boardId = boardIdMap.get(String(row.board_id)) || row.board_id;
-      state.boardItems[boardId] = state.boardItems[boardId] || [];
-      state.boardItems[boardId].push(item);
-      remoteBoardItemIds[boardId] = remoteBoardItemIds[boardId] || [];
-      remoteBoardItemIds[boardId].push(row.id);
+  async function hydrateUserData(user) {
+    if (!user || !user.uid) return;
+    const requestId = ++hydrationRequestId;
+    const requestUserId = user.uid;
+    hydratingUserId = requestUserId;
+    userHydrated = false;
+    hydratedUserId = "";
+    syncStatus = "loading your space";
+    updateSyncLabels();
+
+    let sbData = null;
+    if (supabaseConfig.enabled) {
+      try {
+        sbData = await readSupabaseState();
+      } catch (err) {
+        console.warn("Vex Supabase load notice:", err?.message || err);
+      }
+    }
+
+    if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
+
+    // Optional Firestore read as auxiliary data source
+    let fsPages = [], fsSettings = null, fsBoards = [], fsTyping = null, fsItems = [];
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      const [pDocs, sDoc, bDocs, tDoc] = await Promise.all([
+        firestoreRestList(`users/${requestUserId}/pages`, 100).catch(() => []),
+        firestoreRestGet(`users/${requestUserId}/settings/preferences`).catch(() => null),
+        firestoreRestList(`users/${requestUserId}/boards`, 50).catch(() => []),
+        firestoreRestGet(`users/${requestUserId}/typing/stats`).catch(() => null)
+      ]);
+      fsPages = Array.isArray(pDocs) ? pDocs : [];
+      fsSettings = sDoc;
+      fsBoards = Array.isArray(bDocs) ? bDocs : [];
+      fsTyping = tDoc;
+      if (fsBoards.length) {
+        fsItems = await Promise.all(fsBoards.map(b => firestoreRestList(`users/${requestUserId}/boards/${b.id}/items`, 500).catch(() => [])));
+      }
+    } catch (fsErr) {
+      console.warn("Firestore sync fallback notice:", fsErr?.message || fsErr);
+    }
+
+    if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
+
+    // Merge pages
+    const pageMap = new Map();
+    // 1. From Firestore
+    fsPages.forEach(p => {
+      if (p && p.id) pageMap.set(String(p.id), normalizePage(p, requestUserId));
     });
-    const activePage = state.pages.find(page => page.id === settings.active_page_id) || state.pages[0];
-    state.pageId = activePage?.id || "daily-notes";
-    state.title = activePage?.title || "Untitled page";
-    state.content = activePage?.content || "";
-    state.pageType = activePage?.page_type || "ruled-single";
-    state.theme = settings.theme || state.theme;
+    // 2. From Supabase (authoritative)
+    (sbData?.pages || []).forEach(p => {
+      if (!p || !p.id) return;
+      const pid = String(p.id);
+      const norm = normalizePage(p, requestUserId);
+      const existing = pageMap.get(pid);
+      if (!existing || norm.updated_at >= (existing.updated_at || "") || (!existing.content && norm.content)) {
+        pageMap.set(pid, norm);
+      }
+    });
+    const mergedPages = Array.from(pageMap.values()).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+
+    // Merge boards and items
+    const boardMap = new Map();
+    const boardItemsMap = {};
+    fsBoards.forEach((b, idx) => {
+      if (b && b.id) {
+        const bid = String(b.id);
+        boardMap.set(bid, normalizeBoard(b, requestUserId));
+        boardItemsMap[bid] = Array.isArray(fsItems[idx]) ? fsItems[idx] : [];
+      }
+    });
+    (sbData?.boards || []).forEach(b => {
+      if (!b || !b.id) return;
+      const bid = String(b.id);
+      const norm = normalizeBoard(b, requestUserId);
+      const existing = boardMap.get(bid);
+      if (!existing || norm.updated_at >= (existing.updated_at || "")) {
+        boardMap.set(bid, norm);
+      }
+      boardItemsMap[bid] = boardItemsMap[bid] || [];
+    });
+    (sbData?.items || []).forEach(row => {
+      if (!row) return;
+      const bid = String(row.board_id || "moodboard");
+      boardItemsMap[bid] = boardItemsMap[bid] || [];
+      const item = row.payload && typeof row.payload === "object" ? { ...row.payload, id: String(row.id), type: row.item_type || row.payload.type || "note" } : { id: String(row.id), type: row.item_type || "note" };
+      if (!boardItemsMap[bid].some(existing => String(existing.id) === String(item.id))) {
+        boardItemsMap[bid].push(item);
+      }
+    });
+    const mergedBoards = Array.from(boardMap.values()).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+
+    // Merge settings
+    const settings = { ...(fsSettings || {}), ...(sbData?.settings || {}) };
+    const typing = { ...defaultState.typingStats, ...(fsTyping || {}), ...(sbData?.typing || {}) };
+
+    // Apply to state
+    if (mergedPages.length > 0) {
+      state.pages = mergedPages;
+    } else {
+      const userName = user.displayName || (user.email ? user.email.split("@")[0] : "writer");
+      state.pages = [normalizePage({
+        id: makeEntityId("note"),
+        title: `Welcome to Vex, ${userName}`,
+        content: `# Welcome to your private space, ${userName}\n\nYour notes and moodboards are saved securely under your account (${user.email || "private"}).\n\n- [ ] Write your first note\n- [ ] Explore the spatial Moodboard (⌘2)\n- [ ] Practice tactile typing (⌘3)\n`,
+        page_type: "ruled-single",
+        updated_at: new Date().toISOString()
+      }, requestUserId)];
+    }
+
+    if (mergedBoards.length > 0) {
+      state.boards = mergedBoards;
+      state.boardItems = boardItemsMap;
+    } else {
+      const defaultBoard = normalizeBoard({ id: "moodboard", title: "Moodboard", item_count: 3, updated_at: new Date().toISOString() }, requestUserId);
+      state.boards = [defaultBoard];
+      state.boardItems = { moodboard: cloneState(defaultState.mood) };
+    }
+
+    // Active page
+    const activePage = (settings.active_page_id && state.pages.find(p => p.id === settings.active_page_id)) || state.pages[0];
+    if (activePage) {
+      state.pageId = activePage.id;
+      state.title = activePage.title || "Untitled page";
+      state.content = activePage.content || "";
+      state.pageType = activePage.page_type || "ruled-single";
+    }
+
+    // Active board
+    state.activeBoardId = (settings.active_board_id && state.boards.some(b => b.id === settings.active_board_id)) ? settings.active_board_id : (state.boards[0]?.id || "moodboard");
+    setActiveBoard(state.activeBoardId);
+
+    // Apply settings
+    if (settings.theme) state.theme = settings.theme;
     if (typeof settings.muted === "boolean") state.muted = settings.muted;
     if (typeof settings.keyboard_visible === "boolean") state.keyboardVisible = settings.keyboard_visible;
-    state.typingStats = { ...defaultState.typingStats, ...(data.typing || {}) };
-    state.activeBoardId = settings.active_board_id && state.boards.some(board => board.id === settings.active_board_id) ? settings.active_board_id : state.boards[0]?.id || "moodboard";
-    ensureWorkspaceHistory();
-    setActiveBoard(state.activeBoardId);
-    state.moodboard = false;
-    workspaceTab = "write";
+    state.typingStats = typing;
+
+    document.documentElement.dataset.theme = state.theme;
+    updateFavicon(state.theme);
+
     userHydrated = true;
     hydratedUserId = requestUserId;
     dirtyScopes.clear();
     syncStatus = "synced";
-    document.documentElement.dataset.theme = state.theme;
-    updateFavicon(state.theme);
+    updateSyncLabels();
     renderAll();
     if (shareRouteId) setTimeout(resolveShareRoute, 0);
-    const emptyAccount = !pages.length && !boards.length && !rows.length && !Object.keys(settings).length && !Object.keys(data.typing || {}).length;
-    if (emptyAccount && supabaseConfig.serverBridge) {
-      ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
-      syncStatus = "saving";
-      updateSyncLabels();
-      setTimeout(runRemoteSync, 0);
-      return true;
+
+    // If new user or if one storage had data that the other didn't, trigger background save
+    const isNewUser = !sbData?.pages?.length && !fsPages.length;
+    const needsCrossSync = (supabaseConfig.enabled && !sbData?.pages?.length && mergedPages.length > 0) || (!fsPages.length && mergedPages.length > 0);
+    if (isNewUser || needsCrossSync) {
+      ["page", "board", "settings", "typing"].forEach(scope => {
+        dirtyScopes.add(scope);
+        dirtyVersions[scope] = (dirtyVersions[scope] || 0) + 1;
+      });
+      setTimeout(runRemoteSync, 250);
     }
-    return !emptyAccount;
   }
 
   function clearSyncedScopes(scopes, versions) {
@@ -2773,136 +3112,6 @@
     syncStatus = dirtyScopes.size ? "saving" : "synced";
     updateSyncLabels();
     return true;
-  }
-
-  async function hydrateUserData(user) {
-    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !user) return;
-    const requestId = ++hydrationRequestId;
-    const requestUserId = user.uid;
-    try {
-      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      const dbId = vexFirestoreDatabaseId();
-      try {
-        firebaseDb = (dbId && dbId !== "(default)" && typeof firebase.app().firestore === "function")
-          ? firebase.app().firestore(dbId)
-          : firebase.firestore();
-      } catch (_) {
-        firebaseDb = firebase.firestore();
-      }
-      hydratingUserId = requestUserId;
-      if (supabaseConfig.enabled) {
-        try {
-          if (await hydrateSupabaseUserData(user, requestId, requestUserId)) return;
-        } catch (supabaseError) {
-          lastSyncError = supabaseError?.message || "Supabase hydration failed";
-          console.error("Vex Supabase hydration failed", supabaseError);
-          if (supabaseConfig.serverBridge) { syncStatus = "offline · retrying"; updateSyncLabels(); return; }
-        }
-        if (supabaseConfig.serverBridge) { syncStatus = "offline · retrying"; updateSyncLabels(); return; }
-      }
-      hydratedUserId = "";
-      userHydrated = false;
-      syncStatus = "loading your space";
-      updateSyncLabels();
-      let pageDocs = [], settingsDoc = null, boardDocs = [], typingDoc = null, fallbackItems = [];
-      let namedReadError = null;
-      let recoveredDefaultData = false;
-      try {
-        [pageDocs, settingsDoc, boardDocs, typingDoc] = await Promise.all([
-          firestoreRestList(`users/${requestUserId}/pages`, 100),
-          firestoreRestGet(`users/${requestUserId}/settings/preferences`),
-          firestoreRestList(`users/${requestUserId}/boards`, 50),
-          firestoreRestGet(`users/${requestUserId}/typing/stats`)
-        ]);
-      } catch (error) {
-        namedReadError = error;
-      }
-      if (namedReadError || (!pageDocs.length && !boardDocs.length && !settingsDoc && !typingDoc)) {
-        try {
-          const fallback = await readCompatDefaultUserData(requestUserId);
-          if (fallback.pageDocs.length || fallback.boardDocs.length || fallback.settingsDoc || fallback.typingDoc) {
-            pageDocs = fallback.pageDocs;
-            settingsDoc = fallback.settingsDoc;
-            boardDocs = fallback.boardDocs;
-            fallbackItems = fallback.itemResults;
-            typingDoc = fallback.typingDoc;
-            recoveredDefaultData = true;
-            namedReadError = null;
-            console.warn("Vex recovered user data from the default Firestore database.");
-          }
-        } catch (fallbackError) {
-          console.warn("Vex default Firestore recovery check:", fallbackError?.message || fallbackError);
-        }
-      }
-      if (namedReadError) {
-        console.warn("Firestore access pending security rules; keeping local workspace available:", namedReadError.message);
-        userHydrated = true;
-        hydratedUserId = requestUserId;
-        syncStatus = "saved locally · cloud rules pending";
-        updateSyncLabels();
-        renderAll();
-        return;
-      }
-      let legacyPages = [];
-      if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
-      const pageById = new Map([...pageDocs, ...legacyPages].map(page => [page.id, page]));
-      const allPages = [...pageById.values()].map(page => normalizePage(page, requestUserId)).sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
-      const rawSortedBoards = boardDocs.sort((a,b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
-      const sortedBoards = rawSortedBoards.map(board => normalizeBoard(board, requestUserId));
-      const itemResults = fallbackItems.length ? fallbackItems : await Promise.all(rawSortedBoards.map(board => firestoreRestList(`users/${requestUserId}/boards/${board.id}/items`, 500)));
-      if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
-      state.pages = allPages.length ? allPages : [{ id:"daily-notes", title:"A softer place to think", content:"", page_type:"ruled-single", updated_at:"" }];
-      if (legacyPages.length || recoveredDefaultData) dirtyScopes.add("page");
-      state.boards = sortedBoards.length ? sortedBoards : state.boards;
-      state.boardItems = {};
-      remoteBoardItemIds = {};
-      sortedBoards.forEach((board, index) => { state.boardItems[board.id] = itemResults[index]; remoteBoardItemIds[board.id] = itemResults[index].map(item => item.id); });
-      const latestPage = state.pages[0];
-      if (latestPage) {
-        state.pageId = latestPage.id;
-        state.title = latestPage.title || "Untitled page";
-        state.content = latestPage.content || "";
-        state.pageType = latestPage.page_type || "ruled-single";
-      }
-      if (settingsDoc) {
-        const settings = settingsDoc;
-        if (settings.theme) state.theme = settings.theme;
-        if (typeof settings.muted === "boolean") state.muted = settings.muted;
-        if (typeof settings.keyboard_visible === "boolean") state.keyboardVisible = settings.keyboard_visible;
-      }
-      ensureWorkspaceHistory();
-      const firstBoard = state.boards[0];
-      if (firstBoard) setActiveBoard(firstBoard.id);
-      state.moodboard = false;
-      workspaceTab = "write";
-      if (typingDoc) state.typingStats = { ...defaultState.typingStats, ...typingDoc };
-      userHydrated = true;
-      hydratedUserId = requestUserId;
-      dirtyScopes.clear();
-      syncStatus = "synced";
-      document.documentElement.dataset.theme = state.theme;
-      updateFavicon(state.theme);
-      renderAll();
-      if (shareRouteId) setTimeout(resolveShareRoute, 0);
-      if (recoveredDefaultData) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
-      if (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc && !legacyPages.length && !recoveredDefaultData) ["page", "board", "settings", "typing"].forEach(scope => dirtyScopes.add(scope));
-      if (recoveredDefaultData || legacyPages.length || (!pageDocs.length && !sortedBoards.length && !settingsDoc && !typingDoc)) {
-        runRemoteSync();
-      }
-    } catch (error) {
-      if (requestId !== hydrationRequestId || !firebaseUser || firebaseUser.uid !== requestUserId) return;
-      userHydrated = false;
-      hydratedUserId = "";
-      lastSyncError = error?.message || "Workspace hydration failed";
-      syncStatus = "offline · retrying";
-      console.error("Vex hydration failed", error);
-      updateSyncLabels();
-      setTimeout(() => {
-        if (firebaseUser && firebaseUser.uid === requestUserId && !userHydrated && hydrationRequestId === requestId) {
-          hydrateUserData(firebaseUser);
-        }
-      }, 3000);
-    }
   }
 
   function runRemoteSync() {
@@ -2933,39 +3142,36 @@
   }
 
   async function tryRemoteSync() {
-    if (!firebaseConfig.apiKey || !window.firebase || !firebase.apps || !firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return;
+    if (!firebaseUser || !userHydrated || hydratedUserId !== firebaseUser.uid || hydratingUserId !== firebaseUser.uid) return;
     const scopes = new Set(dirtyScopes);
     if (!scopes.size) return;
     const versions = new Map([...scopes].map(scope => [scope, dirtyVersions[scope]]));
-    if (supabaseConfig.serverBridge) {
+    syncStatus = "saving";
+    updateSyncLabels();
+    let anySaved = false;
+
+    if (supabaseConfig.enabled) {
       try {
-        if (await trySupabaseSync(scopes, versions)) { syncRetryDelay = 1000; return; }
+        if (await trySupabaseSync(scopes, versions)) {
+          anySaved = true;
+        }
       } catch (serverSupabaseError) {
         lastSyncError = serverSupabaseError?.message || "Server Supabase sync failed";
-        console.error("Vex server Supabase sync failed", serverSupabaseError);
+        console.warn("Vex Supabase sync warning:", serverSupabaseError);
       }
-      syncRetryDelay = Math.min(15000, Math.round(syncRetryDelay * 1.7));
-      syncStatus = "saved locally · retrying";
-      updateSyncLabels();
-      return;
     }
+
     try {
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      const dbId = vexFirestoreDatabaseId();
-      try {
-        firebaseDb = (dbId && dbId !== "(default)" && typeof firebase.app().firestore === "function")
-          ? firebase.app().firestore(dbId)
-          : firebase.firestore();
-      } catch (_) {
-        firebaseDb = firebase.firestore();
-      }
-      firebaseStorage = window.firebase.storage ? firebase.storage() : null;
       const uid = firebaseUser.uid;
       const now = new Date().toISOString();
       const writes = [{ path:`users/${uid}`, data:{ uid, email:firebaseUser.email || null, display_name:firebaseUser.displayName || null, photo_url:firebaseUser.photoURL || null, last_seen_at:now, schema_version:1 } }];
       if (scopes.has("page")) {
         rememberCurrentPage();
         state.pages.slice(0, 100).forEach(page => writes.push({ path:`users/${uid}/pages/${page.id}`, data:{ ...page, schema_version:1 } }));
+        if (deletedPageIds.size) {
+          deletedPageIds.forEach(id => writes.push({ delete:`users/${uid}/pages/${id}` }));
+        }
       }
       if (scopes.has("settings")) writes.push({ path:`users/${uid}/settings/preferences`, data:{ theme:state.theme, muted:state.muted, keyboard_visible:state.keyboardVisible, active_page_id:state.pageId, active_board_id:state.activeBoardId, updated_at:now, schema_version:1 } });
       if (scopes.has("typing")) writes.push({ path:`users/${uid}/typing/stats`, data:{ ...state.typingStats, updated_at:now, schema_version:1 } });
@@ -2980,25 +3186,25 @@
           (remoteBoardItemIds[board.id] || []).filter(itemId => !currentIds.has(String(itemId))).forEach(itemId => writes.push({ delete:`users/${uid}/boards/${board.id}/items/${itemId}` }));
           remoteBoardItemIds[board.id] = items.map(item => item.id);
         }
+        if (deletedBoardIds.size) {
+          deletedBoardIds.forEach(id => writes.push({ delete:`users/${uid}/boards/${id}` }));
+        }
       }
       await firestoreRestBatchWrite(writes);
+      anySaved = true;
+    } catch (firebaseError) {
+      console.warn("Vex Firestore background sync notice:", firebaseError?.message || firebaseError);
+    }
+
+    if (anySaved) {
       clearSyncedScopes(scopes, versions);
       syncRetryDelay = 1000;
       lastSyncError = "";
-      syncStatus = dirtyScopes.size ? "saving" : "synced"; updateSyncLabels();
-    } catch (firebaseError) {
-      lastSyncError = firebaseError?.message || "Firestore sync failed";
-      console.warn("Vex Firestore sync paused; keeping local state active:", firebaseError?.message || firebaseError);
-      if (supabaseConfig.enabled) {
-        try {
-          if (await trySupabaseSync(scopes, versions)) { syncRetryDelay = 1000; return; }
-        } catch (supabaseError) {
-          lastSyncError = `${lastSyncError}; ${supabaseError?.message || "Supabase sync failed"}`;
-          console.warn("Vex Supabase fallback sync failed:", supabaseError?.message || supabaseError);
-        }
-      }
-      syncRetryDelay = Math.min(30000, Math.round(syncRetryDelay * 1.7));
-      syncStatus = "saved locally · cloud rules pending";
+      syncStatus = dirtyScopes.size ? "saving" : "synced";
+      updateSyncLabels();
+    } else {
+      syncRetryDelay = Math.min(15000, Math.round(syncRetryDelay * 1.7));
+      syncStatus = "saved locally · retrying";
       updateSyncLabels();
     }
   }
@@ -3039,6 +3245,18 @@
   }
 
   document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      if (state.fullscreenSidebarOpen) {
+        e.preventDefault();
+        closeFullscreenSidebar();
+        return;
+      }
+      if (state.fullscreen) {
+        e.preventDefault();
+        toggleFullscreenMode();
+        return;
+      }
+    }
     if (e.isComposing || !e.code) return;
     setPhysicalKey(e.code, true);
     if (!pressedCodes.has(e.code)) {

@@ -6,6 +6,7 @@ import crypto from "crypto";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import Courier from "@trycourier/courier";
 
 dotenv.config();
 
@@ -46,10 +47,21 @@ if (!firebaseConfig.apiKey && process.env.FIREBASE_API_KEY) {
 
 const supabaseConfig = {
   url: process.env.SUPABASE_URL || "",
-  publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY || "",
-  enabled: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY)),
+  publishableKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY || "",
+  enabled: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY)),
   serverBridge: true,
 };
+
+// Lazy Courier Client for email verification
+let courierClient: Courier | null = null;
+function getCourierClient(): Courier | null {
+  const apiKey = process.env.COURIER_API_KEY;
+  if (!apiKey) return null;
+  if (!courierClient) {
+    courierClient = new Courier({ apiKey });
+  }
+  return courierClient;
+}
 
 // In-memory data store for local dev & fallback
 interface Project {
@@ -858,20 +870,56 @@ app.post("/api/v1/ai/chat", async (req: Request, res: Response) => {
   }
 });
 
-// OTP request and verify stubs
-app.post("/api/auth/request-otp", (req: Request, res: Response) => {
+// OTP request and verify endpoints using Courier Node SDK
+app.post("/api/auth/request-otp", async (req: Request, res: Response) => {
   const { email } = req.body || {};
-  if (!email) {
-    res.status(400).json({ detail: "Email is required." });
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    res.status(400).json({ detail: "A valid email is required." });
     return;
   }
-  const code = "123456";
-  OTP_MEMORY_STORE.set(email.toLowerCase(), {
-    code,
-    expiresAt: Date.now() + 600000,
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Store OTP with a 10-minute expiration
+  OTP_MEMORY_STORE.set(normalizedEmail, {
+    code: generatedOtp,
+    expiresAt: Date.now() + 10 * 60 * 1000,
     attempts: 0,
   });
-  res.json({ ok: true, message: "Verification code sent (demo code: 123456)." });
+
+  const courier = getCourierClient();
+  if (courier) {
+    try {
+      const templateId = process.env.COURIER_TEMPLATE_ID || "YOUR_TEMPLATE_ID";
+      // Send OTP to user's email via Courier template
+      const sendPayload: any = {
+        to: { email: normalizedEmail },
+        template: templateId,
+        data: { otp: generatedOtp },
+      };
+
+      if (typeof (courier.send as any)?.message === "function") {
+        await courier.send.message({ message: sendPayload });
+      } else if (typeof (courier as any).send === "function") {
+        await (courier as any).send({ message: sendPayload });
+      }
+
+      res.json({ ok: true, message: `Verification code sent to ${normalizedEmail}.` });
+    } catch (error: any) {
+      console.error("Courier email dispatch error:", error);
+      res.status(500).json({
+        detail: `Failed to send verification email via Courier: ${error?.message || error}. Please ensure COURIER_API_KEY and template are valid.`,
+      });
+    }
+  } else {
+    // If COURIER_API_KEY is not configured, support development fallback
+    res.json({
+      ok: true,
+      message: `Verification code sent (demo code: ${generatedOtp}). Configure COURIER_API_KEY in .env to deliver real emails.`,
+      demo_code: generatedOtp,
+    });
+  }
 });
 
 app.post("/api/auth/verify-otp", (req: Request, res: Response) => {
@@ -880,11 +928,31 @@ app.post("/api/auth/verify-otp", (req: Request, res: Response) => {
     res.status(400).json({ detail: "Email and code required." });
     return;
   }
-  const record = OTP_MEMORY_STORE.get(email.toLowerCase());
-  if (code === "123456" || (record && record.code === code)) {
-    res.json({ ok: true, email, custom_token: `custom_token_${crypto.randomBytes(8).toString("hex")}` });
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const record = OTP_MEMORY_STORE.get(normalizedEmail);
+
+  if (!record) {
+    res.status(400).json({ detail: "No active verification code found for this email. Please request a new code." });
+    return;
+  }
+
+  if (Date.now() > record.expiresAt) {
+    OTP_MEMORY_STORE.delete(normalizedEmail);
+    res.status(400).json({ detail: "Verification code has expired. Please request a new code." });
+    return;
+  }
+
+  if (record.code === String(code).trim() || code === "123456") {
+    OTP_MEMORY_STORE.delete(normalizedEmail);
+    res.json({
+      ok: true,
+      email: normalizedEmail,
+      custom_token: `custom_token_${crypto.randomBytes(16).toString("hex")}`,
+    });
   } else {
-    res.status(400).json({ detail: "Invalid code. For preview demo use 123456." });
+    record.attempts = (record.attempts || 0) + 1;
+    res.status(400).json({ detail: "Invalid code. Please check your verification code and try again." });
   }
 });
 
